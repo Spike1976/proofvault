@@ -286,6 +286,9 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
       }) { Text(if (isPaused) "Resume" else "Pause") }
      }
      Text("Recording continues when the screen is switched away. Start recording with the app open.", color = muted)
+     val playbackDiagnostics = context.getSharedPreferences(PlaybackCaptureService.STATUS_PREFS, Context.MODE_PRIVATE)
+     val captureResult = playbackDiagnostics.getString(PlaybackCaptureService.STATUS_KEY, null)
+     if (captureResult != null) InfoCard("Last playback capture", captureResult)
      Text("App playback audio", style = MaterialTheme.typography.titleMedium)
      Text("Captures supported music/game/media audio with system consent. Phone calls, protected streams and apps that opt out cannot be captured.", color = muted)
      OutlinedButton(onClick = {
@@ -293,6 +296,7 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
        context.startService(Intent(context, PlaybackCaptureService::class.java).setAction(PlaybackCaptureService.STOP))
       } else {
        val manager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+       playbackDiagnostics.edit().remove(PlaybackCaptureService.STATUS_KEY).apply()
        playbackConsent.launch(manager.createScreenCaptureIntent())
       }
      }, modifier = Modifier.fillMaxWidth()) {
