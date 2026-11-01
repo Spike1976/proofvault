@@ -44,7 +44,7 @@ class RecordingService : Service() {
     try {
      startForeground(100, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
      file = VaultRepository(this).newRecording()
-     recorder.start(file!!)
+     recorder.start(file!!, CapturePreferences(this).source())
      recording = true; paused = false
     } catch (t: Throwable) {
      file?.delete(); file = null; recording = false; paused = false
