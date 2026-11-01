@@ -77,6 +77,7 @@ class AcousticRecordingService : Service() {
    worker = Thread {
     var countBytes = 0L
     var totalSamples = 0L
+    var silentBytes = 0L
     var nonSilent = 0L
     try {
      RandomAccessFile(output,"rw").use { file ->
@@ -97,11 +98,12 @@ class AcousticRecordingService : Service() {
         i+=2
        }
        peak = localPeak
-       if(localPeak<96) silentSeconds += n/(sampleRate*2) else silentSeconds=0
+       if(localPeak<96) silentBytes += n.toLong() else silentBytes = 0L
+       silentSeconds = (silentBytes / (sampleRate * 2)).toInt()
       }
       wavHeader(file,countBytes)
      }
-     if(countBytes>44L && totalSamples>0) {
+     if(countBytes>0L && totalSamples>0) {
       EvidenceLedger(this).register(output)
       lastResult = if(nonSilent==0L) "Recording saved but microphone received silence. Check call routing." else
        "Acoustic WAV saved. Audible parties still need verification."
