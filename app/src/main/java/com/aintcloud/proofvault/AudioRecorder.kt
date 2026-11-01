@@ -8,12 +8,12 @@ import java.io.File
 /** Records device microphone, not protected remote call audio. */
 class AudioRecorder(private val context: Context) {
  private var recorder: MediaRecorder? = null
- fun start(file: File) {
+ fun start(file: File, source: CaptureSource = CaptureSource.MICROPHONE) {
   check(recorder == null) { "Recording already started" }
   @Suppress("DEPRECATION")
   val r = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else MediaRecorder()
   try {
-   r.setAudioSource(MediaRecorder.AudioSource.MIC)
+   r.setAudioSource(source.id)
    r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
    r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
    r.setAudioEncodingBitRate(128000)
