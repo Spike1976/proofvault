@@ -302,6 +302,11 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
       }
      }
      InfoCard("Device compatibility", capturePrefs.diagnostic(context))
+     val deviceProfile = remember { DeviceCompatibility.detect() }
+     InfoCard("Detected phone family", deviceProfile.label + " • " + deviceProfile.route.name.replace('_', ' '))
+     InfoCard("Recommended recording setup", deviceProfile.instructions)
+     InfoCard("Device limitations", deviceProfile.caveat)
+     Text("This profile does not verify two-sided audio. Test a real call and check both voices.", color = muted)
      OutlinedButton(onClick = { GenReportClipboard.copy(context, CompatibilityReport.create(context)); error = "Compatibility report copied." }, modifier = Modifier.fillMaxWidth()) { Text("Copy compatibility report") }
      Text("Recording folder connector", style = MaterialTheme.typography.titleMedium)
      Text(if (folderConnected) "Folder linked. Select Sync to import new recordings." else "Connect a recording folder exposed by your phone or recorder app. This does not capture calls.", color = muted)
