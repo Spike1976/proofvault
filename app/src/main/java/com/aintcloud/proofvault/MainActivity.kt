@@ -333,7 +333,8 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
     }
     "Record" -> {
      Text("Microphone Recorder", style = MaterialTheme.typography.titleLarge)
-     Text("Capture device microphone audio. Two-sided phone call capture is not supported.", color = muted)
+     Text("Normal recording uses the device microphone. Experimental audio sources apply only to call-session tests.", color = muted)
+     Text("Last source: ${RecordingService.lastSource}", color = muted)
      Spacer(Modifier.height(24.dp))
      Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
       FilledIconButton(
@@ -433,7 +434,7 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
      }
      InfoCard("Recording", "Foreground microphone recording with pause/resume. Calls are not intercepted.")
      Text("Experimental audio source", style = MaterialTheme.typography.titleMedium)
-     Text("Choose a source for manual recordings. Android may return only your voice, silence, or deny capture during calls.", color = muted)
+     Text("Choose a source for call-session experiments only. The regular Record button always uses Microphone. Android may return silence or deny remote call audio.", color = muted)
      CaptureSource.entries.forEach { source ->
       Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
        RadioButton(selected = selectedCapture == source, onClick = { selectedCapture = source; capturePrefs.select(source) })
