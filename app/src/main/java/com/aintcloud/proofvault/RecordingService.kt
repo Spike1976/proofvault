@@ -25,6 +25,7 @@ class RecordingService : Service() {
   @Volatile var lastSource: String = "None"
   @Volatile var liveAmplitude = 0
   @Volatile var silentSeconds = 0
+  @Volatile var systemMuted = false
  }
  private lateinit var recorder: AudioRecorder
  private var file: File? = null
@@ -34,6 +35,8 @@ class RecordingService : Service() {
    if (!recording) return
    if (!paused) {
     liveAmplitude = recorder.peakAmplitude()
+    systemMuted = recorder.systemSilenced
+    if (systemMuted) lastError = "Android is silencing ProofVault microphone capture during this session. Other call audio cannot be forced by an app permission."
     if (liveAmplitude < 50) silentSeconds += 2 else silentSeconds = 0
     if (silentSeconds >= 8) lastError = "No microphone signal for $silentSeconds seconds. Check audio routing."
    }
@@ -69,7 +72,7 @@ class RecordingService : Service() {
      lastSource = chosenSource.label
      recorder.start(file!!, chosenSource)
      recording = true; paused = false
-     liveAmplitude = 0; silentSeconds = 0
+     liveAmplitude = 0; silentSeconds = 0; systemMuted = false
      monitor.removeCallbacks(meter); monitor.postDelayed(meter, 2000)
      callSession = intent.action == CALL_START
     } catch (t: Throwable) {
