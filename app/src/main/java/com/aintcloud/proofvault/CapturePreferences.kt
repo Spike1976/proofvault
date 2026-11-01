@@ -9,6 +9,7 @@ enum class CaptureSource(val label: String, val id: Int) {
  MICROPHONE("Microphone (recommended)", MediaRecorder.AudioSource.MIC),
  VOICE_RECOGNITION("Voice recognition", MediaRecorder.AudioSource.VOICE_RECOGNITION),
  VOICE_COMMUNICATION("Voice communication", MediaRecorder.AudioSource.VOICE_COMMUNICATION),
+ VOICE_CALL("Voice call (may require privileged access)", MediaRecorder.AudioSource.VOICE_CALL),
  UNPROCESSED("Unprocessed (if available)", MediaRecorder.AudioSource.UNPROCESSED);
 
  companion object {
