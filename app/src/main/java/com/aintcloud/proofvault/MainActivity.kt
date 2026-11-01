@@ -13,6 +13,8 @@ import android.os.Build
 import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
 import android.media.MediaPlayer
+import android.media.AudioManager
+import android.media.AudioFocusRequest
 import android.os.Bundle
 import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
@@ -48,6 +50,7 @@ class MainActivity : FragmentActivity() {
  private var lockEnabled by mutableStateOf(false)
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
+  volumeControlStream = AudioManager.STREAM_MUSIC
   if (intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("audio/") == true) {
    @Suppress("DEPRECATION")
    val shared = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
@@ -110,6 +113,11 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
 
  var playingFile by remember { mutableStateOf<String?>(null) }
  var player by remember { mutableStateOf<MediaPlayer?>(null) }
+ val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+ val focusRequest = remember { AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+  .setAudioAttributes(android.media.AudioAttributes.Builder()
+   .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+   .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build()).build() }
  var error by remember { mutableStateOf<String?>(null) }
  val refresh = { recordings = vault.list() }
  val startRecording = {
@@ -207,6 +215,10 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
    } else {
     val quality = RecordingQuality.inspect(file)
     if (!quality.playable) throw IllegalStateException("This recording cannot be decoded: ${quality.message}")
+    if (audioManager.getStreamVolume(AudioManager.STREAM_MUSIC) == 0)
+     throw IllegalStateException("Media volume is muted. Raise Media volume rather than Call volume.")
+    if (audioManager.requestAudioFocus(focusRequest) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED)
+     throw IllegalStateException("Media playback is unavailable while another call/app controls audio.")
     val newPlayer = MediaPlayer()
     newPlayer.setAudioAttributes(
      android.media.AudioAttributes.Builder()
@@ -229,12 +241,14 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
      it.release()
      player = null
      playingFile = null
+     audioManager.abandonAudioFocusRequest(focusRequest)
     }
     newPlayer.start()
     player = newPlayer
     playingFile = file.name
    }
   } catch (e: Exception) {
+   audioManager.abandonAudioFocusRequest(focusRequest)
    playingFile = null
    error = e.message ?: "Playback failed"
   }
