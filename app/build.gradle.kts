@@ -10,8 +10,8 @@ android {
   applicationId = "com.aintcloud.proofvault"
   minSdk = 26
   targetSdk = 35
-  versionCode = 4
-  versionName = "0.4.0"
+  versionCode = 9
+  versionName = "9.0.0-dev"
  }
  buildTypes { release { isMinifyEnabled = false } }
  compileOptions {
