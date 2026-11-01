@@ -68,6 +68,7 @@ fun ProofVaultApp(startOnRecord: Boolean = false) {
  val vault = remember { VaultRepository(context) }
  val connector = remember { RecordingFolderConnector(context) }
  var folderConnected by remember { mutableStateOf(connector.isConnected()) }
+ var autoImport by remember { mutableStateOf(context.getSharedPreferences("proofvault_settings", android.content.Context.MODE_PRIVATE).getBoolean("auto_import_enabled", false)) }
  
  var tab by remember { mutableStateOf(if (startOnRecord) "Record" else "Home") }
  val settings = remember { context.getSharedPreferences("proofvault_settings", android.content.Context.MODE_PRIVATE) }
@@ -102,6 +103,7 @@ fun ProofVaultApp(startOnRecord: Boolean = false) {
    try {
     connector.connect(uri)
     folderConnected = true
+    if (autoImport) AutoImportScheduler.enable(context)
     val result = connector.sync()
     refresh()
     error = "Connected. Imported ${result.imported} recordings." + (result.warning?.let { " $it" } ?: "")
@@ -274,11 +276,22 @@ fun ProofVaultApp(startOnRecord: Boolean = false) {
      Text(if (folderConnected) "Folder linked. Select Sync to import new recordings." else "Connect a recording folder exposed by your phone or recorder app. This does not capture calls.", color = muted)
      Button(onClick = { selectRecordingFolder.launch(null) }, modifier = Modifier.fillMaxWidth()) { Text(if (folderConnected) "Change recording folder" else "Connect recording folder") }
      if (folderConnected) {
+      Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+       Column(Modifier.weight(1f)) {
+        Text("Automatically import new recordings", style = MaterialTheme.typography.titleMedium)
+        Text("Check the linked recording folder periodically in the background, approximately every 15 minutes or later if Android delays it.", color = muted)
+       }
+       Switch(checked = autoImport, onCheckedChange = { enabled ->
+        autoImport = enabled
+        settings.edit().putBoolean("auto_import_enabled", enabled).apply()
+        if (enabled) AutoImportScheduler.enable(context) else AutoImportScheduler.disable(context)
+       })
+      }
       OutlinedButton(onClick = {
        try { val result = connector.sync(); refresh(); error = "Imported ${result.imported} new files; skipped ${result.alreadySeen} previously imported." + (result.warning?.let { " $it" } ?: "") }
        catch (e: Exception) { error = "Sync failed: ${e.message}" }
       }, modifier = Modifier.fillMaxWidth()) { Text("Sync folder now") }
-      TextButton(onClick = { connector.disconnect(); folderConnected = false }) { Text("Disconnect folder") }
+      TextButton(onClick = { AutoImportScheduler.disable(context); autoImport = false; settings.edit().putBoolean("auto_import_enabled", false).apply(); connector.disconnect(); folderConnected = false }) { Text("Disconnect folder") }
      }
      InfoCard("Security", "Android Keystore encryption module added; vault integration and biometric lock not yet finished.")
      InfoCard("About", "ProofVault v0.1.0 • Ain't Cloud Software")
