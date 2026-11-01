@@ -1,0 +1,52 @@
+name: ProofVault build agent
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '21 10 * * 1'
+permissions:
+  contents: read
+  issues: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Build, unit tests and lint
+        id: check
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          gradle --no-daemon testDebugUnitTest assembleDebug lintDebug 2>&1 | tee proofvault-build.log
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: proofvault-agent-diagnostics
+          path: |
+            proofvault-build.log
+            app/build/reports/
+            app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
+      - name: Update persistent agent tracker
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RESULT: ${{ steps.check.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python3 .github/scripts/update_agent_issue.py
+      - name: Fail if checks failed
+        if: steps.check.outcome != 'success'
+        run: exit 1
