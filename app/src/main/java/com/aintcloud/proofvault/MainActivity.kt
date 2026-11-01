@@ -72,6 +72,12 @@ fun ProofVaultApp() {
  val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
   if (granted) startRecording() else error = "Microphone permission is required."
  }
+ val exportZip = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+  if (uri != null) {
+   try { EvidenceExport(context).export(recordings, uri) }
+   catch (e: Exception) { error = e.message ?: "Export failed" }
+  }
+ }
  val importAudio = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
   if (uri != null) {
    try { vault.importAudio(uri); refresh(); tab = "Vault" }
@@ -192,6 +198,7 @@ fun ProofVaultApp() {
      OutlinedButton(onClick = { importAudio.launch(arrayOf("audio/*")) }) { Text("Import Audio") }
      val visible = recordings.filter { it.name.contains(query, ignoreCase = true) || notes.get(it).contains(query, ignoreCase = true) }
      Text("${visible.size} items", color = muted)
+     OutlinedButton(onClick = { exportZip.launch("ProofVault-Evidence.zip") }, enabled = recordings.isNotEmpty()) { Text("Export evidence ZIP + SHA-256 manifest") }
      LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
       items(visible, key = { it.absolutePath }) { file ->
        EvidenceItem(file, playingFile == file.name, onPlay = { play(file) },
@@ -206,7 +213,7 @@ fun ProofVaultApp() {
      Text("Settings & Security", style = MaterialTheme.typography.titleLarge)
      InfoCard("Privacy", "Recordings remain in app-private local storage. No cloud or telemetry.")
      InfoCard("Recording", "Foreground microphone recording with pause/resume. Calls are not intercepted.")
-     InfoCard("Security", "Biometric lock and app-managed file encryption are planned, not implemented.")
+     InfoCard("Security", "Android Keystore encryption module added; vault integration and biometric lock not yet finished.")
      InfoCard("About", "ProofVault v0.1.0 • Ain't Cloud Software")
     }
    }
