@@ -53,6 +53,8 @@ fun ProofVaultApp() {
  val vault = remember { VaultRepository(context) }
  
  var tab by remember { mutableStateOf("Home") }
+ val settings = remember { context.getSharedPreferences("proofvault_settings", android.content.Context.MODE_PRIVATE) }
+ var callAssist by remember { mutableStateOf(settings.getBoolean("call_assist_enabled", false)) }
  var recordings by remember { mutableStateOf(vault.list()) }
  var query by remember { mutableStateOf("") }
  val notes = remember { EvidenceNotes(context) }
@@ -68,6 +70,12 @@ fun ProofVaultApp() {
    ContextCompat.startForegroundService(context, Intent(context, RecordingService::class.java).setAction(RecordingService.START))
    isRecording = true; isPaused = false
   } catch (e: Exception) { error = e.message ?: "Could not start recording" }
+ }
+ val phonePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+  val permitted = grants[Manifest.permission.READ_PHONE_STATE] == true
+  callAssist = permitted
+  settings.edit().putBoolean("call_assist_enabled", permitted).apply()
+  if (!permitted) error = "Phone permission is required to enable call detection."
  }
  val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
   if (granted) startRecording() else error = "Microphone permission is required."
@@ -212,6 +220,22 @@ fun ProofVaultApp() {
     "Settings" -> {
      Text("Settings & Security", style = MaterialTheme.typography.titleLarge)
      InfoCard("Privacy", "Recordings remain in app-private local storage. No cloud or telemetry.")
+     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+      Column(Modifier.weight(1f)) {
+       Text("Call detection assistance", style = MaterialTheme.typography.titleMedium)
+       Text("Show a notification when a cellular call connects. Does not automatically record both voices.", color = muted)
+      }
+      Switch(checked = callAssist, onCheckedChange = { enabled ->
+       if (!enabled) {
+        callAssist = false
+        settings.edit().putBoolean("call_assist_enabled", false).apply()
+       } else {
+        phonePermission.launch(if (Build.VERSION.SDK_INT >= 33)
+         arrayOf(Manifest.permission.READ_PHONE_STATE, Manifest.permission.POST_NOTIFICATIONS)
+         else arrayOf(Manifest.permission.READ_PHONE_STATE))
+       }
+      })
+     }
      InfoCard("Recording", "Foreground microphone recording with pause/resume. Calls are not intercepted.")
      InfoCard("Security", "Android Keystore encryption module added; vault integration and biometric lock not yet finished.")
      InfoCard("About", "ProofVault v0.1.0 • Ain't Cloud Software")
