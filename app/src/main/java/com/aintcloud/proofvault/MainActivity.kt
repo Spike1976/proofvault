@@ -5,6 +5,8 @@ import android.app.Activity
 import android.media.projection.MediaProjectionManager
 import android.content.Context
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
 import android.net.Uri
 import android.widget.Toast
 import android.os.Build
@@ -176,8 +178,20 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
    catch (e: Exception) { error = e.message ?: "Import failed" }
   }
  }
- DisposableEffect(Unit) {
-  onDispose { player?.release() }
+ DisposableEffect(context) {
+  val receiver = object : BroadcastReceiver() {
+   override fun onReceive(c: Context?, intent: Intent?) {
+    isRecording = RecordingService.recording
+    isPaused = RecordingService.paused
+    recordings = vault.list()
+    RecordingService.lastError?.let { error = it }
+   }
+  }
+  ContextCompat.registerReceiver(context, receiver, IntentFilter(RecordingService.STATUS), ContextCompat.RECEIVER_NOT_EXPORTED)
+  onDispose {
+   context.unregisterReceiver(receiver)
+   player?.release()
+  }
  }
  LaunchedEffect(tab) {
   isRecording = RecordingService.recording
@@ -282,7 +296,8 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
        onClick = {
         if (isRecording) {
          context.startService(Intent(context, RecordingService::class.java).setAction(RecordingService.STOP))
-         isRecording = false; isPaused = false; refresh()
+         // Wait for the service to finish writing the MP4 header before refreshing.
+         isRecording = false; isPaused = false
         } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
          startRecording()
         } else {
