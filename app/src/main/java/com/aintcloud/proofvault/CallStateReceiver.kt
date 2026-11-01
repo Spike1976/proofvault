@@ -34,7 +34,7 @@ class CallStateReceiver : BroadcastReceiver() {
   val open = PendingIntent.getActivity(
    context, 41,
    Intent(context, MainActivity::class.java).putExtra("open_record", true)
-    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
   )
   val notification = NotificationCompat.Builder(context, "call_assist")
@@ -43,6 +43,8 @@ class CallStateReceiver : BroadcastReceiver() {
    .setContentText("Tap to open the recorder. Call audio may be inaccessible on this device.")
    .setContentIntent(open)
    .setAutoCancel(true)
+   .setCategory(NotificationCompat.CATEGORY_CALL)
+   .setPriority(NotificationCompat.PRIORITY_HIGH)
    .build()
   if (Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
    manager.notify(4102, notification)
