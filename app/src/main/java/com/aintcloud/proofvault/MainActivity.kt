@@ -95,6 +95,7 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
  val secureStore = remember { SecureEvidenceStore(context) }
  var secureCount by remember { mutableIntStateOf(secureStore.list().size) }
  var chosenEncrypted by remember { mutableStateOf<File?>(null) }
+ var chosenExport by remember { mutableStateOf<File?>(null) }
  val capturePrefs = remember { CapturePreferences(context) }
  var selectedCapture by remember { mutableStateOf(capturePrefs.source()) }
  val connector = remember { RecordingFolderConnector(context) }
@@ -172,6 +173,33 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
      ?: error("Cannot open export destination")
    } catch (e: Exception) { error = "Encrypted export failed: ${e.message}" }
    finally { temp?.delete() }
+  }
+ }
+ val exportMp4 = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("video/mp4")) { uri ->
+  val source = chosenExport
+  chosenExport = null
+  if (uri != null && source != null) {
+   val temp = File.createTempFile("proofvault-export-", ".mp4", context.cacheDir)
+   try {
+    AudioMp4Exporter.convert(source, temp)
+    context.contentResolver.openOutputStream(uri)?.use { output ->
+     temp.inputStream().use { input -> input.copyTo(output) }
+    } ?: throw IllegalStateException("Cannot open destination")
+    error = "Audio-only MP4 exported."
+   } catch (e: Exception) { error = "MP4 export failed: ${e.message}" }
+   finally { temp.delete() }
+  }
+ }
+ val exportOriginal = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+  val source = chosenExport
+  chosenExport = null
+  if (uri != null && source != null) {
+   try {
+    context.contentResolver.openOutputStream(uri)?.use { output ->
+     source.inputStream().use { input -> input.copyTo(output) }
+    } ?: throw IllegalStateException("Cannot open destination")
+    error = "Original audio exported."
+   } catch (e: Exception) { error = "Export failed: ${e.message}" }
   }
  }
  val exportZip = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
@@ -290,7 +318,9 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
      Text("Recent recordings", style = MaterialTheme.typography.titleMedium)
      LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
       items(recordings.take(5), key = { it.absolutePath }) { file ->
-       EvidenceItem(file, playingFile == file.name, notes, ledger, onArchive = {
+       EvidenceItem(file, playingFile == file.name, notes, ledger,
+        onExport = { chosenExport = file; exportMp4.launch(file.nameWithoutExtension + ".mp4") },
+        onExportOriginal = { chosenExport = file; exportOriginal.launch(file.name) }, onArchive = {
          try { secureStore.seal(file); secureCount = secureStore.list().size; vault.delete(file); refresh() }
          catch (e: Exception) { error = "Archive failed: ${e.message}" }
         }, onPlay = { play(file) },
@@ -467,10 +497,11 @@ private fun InfoCard(title: String, subtitle: String) {
 }
 
 @Composable
-private fun EvidenceItem(file: File, playing: Boolean, notes: EvidenceNotes, ledger: EvidenceLedger, onArchive: () -> Unit, onPlay: () -> Unit, onDelete: () -> Unit) {
+private fun EvidenceItem(file: File, playing: Boolean, notes: EvidenceNotes, ledger: EvidenceLedger, onArchive: () -> Unit, onExport: () -> Unit, onExportOriginal: () -> Unit, onPlay: () -> Unit, onDelete: () -> Unit) {
  var editNotes by remember { mutableStateOf(false) }
  var noteText by remember { mutableStateOf(notes.get(file)) }
  var confirmDelete by remember { mutableStateOf(false) }
+ var exportMenu by remember { mutableStateOf(false) }
  ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = panel), modifier = Modifier.fillMaxWidth()) {
   Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
    Icon(Icons.Default.GraphicEq, null, tint = teal)
@@ -488,10 +519,21 @@ private fun EvidenceItem(file: File, playing: Boolean, notes: EvidenceNotes, led
     Icon(if (playing) Icons.Default.Stop else Icons.Default.PlayArrow, contentDescription = if (playing) "Stop" else "Play", tint = teal)
    }
    IconButton(onClick = onArchive) { Icon(Icons.Default.Lock, "Encrypt and archive", tint = teal) }
+   IconButton(onClick = { exportMenu = true }) { Icon(Icons.Default.Share, "Export recording", tint = teal) }
    IconButton(onClick = { noteText = notes.get(file); editNotes = true }) { Icon(Icons.Default.EditNote, "Edit evidence notes", tint = teal) }
    IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Default.Delete, "Delete", tint = muted) }
   }
  }
+ if (exportMenu) AlertDialog(
+  onDismissRequest = { exportMenu = false },
+  title = { Text("Export recording") },
+  text = { Column {
+   Text("MP4 conversion supports AAC recordings. Output is audio-only MP4, not a video. It cannot restore missing sound.")
+   TextButton(onClick = { exportMenu = false; onExport() }) { Text("Convert to MP4") }
+   TextButton(onClick = { exportMenu = false; onExportOriginal() }) { Text("Export original audio") }
+  } },
+  confirmButton = { TextButton(onClick = { exportMenu = false }) { Text("Cancel") } }
+ )
  if (editNotes) AlertDialog(onDismissRequest = { editNotes = false }, title = { Text("Evidence notes & tags") }, text = { OutlinedTextField(value = noteText, onValueChange = { noteText = it }, label = { Text("Notes / searchable keywords") }, minLines = 3) }, confirmButton = { TextButton(onClick = { notes.set(file, noteText); editNotes = false }) { Text("Save") } }, dismissButton = { TextButton(onClick = { editNotes = false }) { Text("Cancel") } })
  if (confirmDelete) AlertDialog(
   onDismissRequest = { confirmDelete = false },
