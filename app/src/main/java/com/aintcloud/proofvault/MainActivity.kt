@@ -40,6 +40,7 @@ private val muted = Color(0xFF98AFBC)
 class MainActivity : FragmentActivity() {
  private var unlocked by mutableStateOf(false)
  private var authStarted = false
+ private var lockEnabled by mutableStateOf(false)
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
   if (intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("audio/") == true) {
@@ -56,12 +57,13 @@ class MainActivity : FragmentActivity() {
    intent.removeExtra(Intent.EXTRA_STREAM)
    intent.action = Intent.ACTION_MAIN
   }
-  unlocked = !AppLock.enabled(this)
+  lockEnabled = AppLock.enabled(this)
+  unlocked = !lockEnabled
   setContent {
    MaterialTheme(colorScheme = darkColorScheme(primary = teal, background = ink, surface = panel)) {
-    if (unlocked) ProofVaultApp(startOnRecord = intent?.getBooleanExtra("open_record", false) == true, onEnableLock = { enabled ->
-      if (!enabled) { AppLock.setEnabled(this, false) }
-      else AppLock.authenticate(this, "Enable ProofVault lock", { AppLock.setEnabled(this, true) }, { })
+    if (unlocked) ProofVaultApp(startOnRecord = intent?.getBooleanExtra("open_record", false) == true, lockEnabled = lockEnabled, onEnableLock = { enabled ->
+      if (!enabled) { AppLock.setEnabled(this, false); lockEnabled = false }
+      else AppLock.authenticate(this, "Enable ProofVault lock", { AppLock.setEnabled(this, true); lockEnabled = true }, { })
     })
     else Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
       Button(onClick = { unlock() }) { Text("Unlock ProofVault") }
@@ -70,7 +72,7 @@ class MainActivity : FragmentActivity() {
   }
  }
  override fun onResume() { super.onResume(); if (!unlocked && !authStarted) unlock() }
- override fun onStop() { super.onStop(); if (AppLock.enabled(this)) unlocked = false; authStarted = false }
+ override fun onStop() { super.onStop(); if (lockEnabled) unlocked = false; authStarted = false }
  private fun unlock() {
   if (authStarted) return
   authStarted = true
@@ -79,7 +81,7 @@ class MainActivity : FragmentActivity() {
 }
 
 @Composable
-fun ProofVaultApp(startOnRecord: Boolean = false, onEnableLock: (Boolean) -> Unit = {}) {
+fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, onEnableLock: (Boolean) -> Unit = {}) {
  val context = LocalContext.current
  val vault = remember { VaultRepository(context) }
  val capturePrefs = remember { CapturePreferences(context) }
@@ -324,7 +326,7 @@ fun ProofVaultApp(startOnRecord: Boolean = false, onEnableLock: (Boolean) -> Uni
      InfoCard("Security", "App lock uses your phone biometrics or device PIN. Individual recording encryption is still pending.")
      Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
       Column(Modifier.weight(1f)) { Text("Require device authentication"); Text("Unlock ProofVault with biometrics or screen lock", color = muted) }
-      Switch(checked = AppLock.enabled(context), enabled = AppLock.available(context), onCheckedChange = onEnableLock)
+      Switch(checked = lockEnabled, enabled = AppLock.available(context), onCheckedChange = onEnableLock)
      }
      InfoCard("About", "ProofVault v0.1.0 • Ain't Cloud Software")
     }
