@@ -11,6 +11,9 @@ import java.io.File
 class RecordingService : Service() {
  companion object {
   const val START = "com.aintcloud.proofvault.START"
+  const val CALL_START = "com.aintcloud.proofvault.CALL_START"
+  const val CALL_STOP = "com.aintcloud.proofvault.CALL_STOP"
+  @Volatile var callSession = false
   const val STOP = "com.aintcloud.proofvault.STOP"
   const val PAUSE = "com.aintcloud.proofvault.PAUSE"
   const val RESUME = "com.aintcloud.proofvault.RESUME"
@@ -41,7 +44,7 @@ class RecordingService : Service() {
  }
  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
   when (intent?.action) {
-   START -> if (!recording) {
+   START, CALL_START -> if (!recording) {
     try {
      startForeground(100, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
      lastError = null
@@ -49,6 +52,7 @@ class RecordingService : Service() {
      val chosenSource = CapturePreferences(this).source()
      recorder.start(file!!, chosenSource)
      recording = true; paused = false
+     callSession = intent.action == CALL_START
     } catch (t: Throwable) {
      lastError = "Selected source ${CapturePreferences(this).source().label} failed: ${t.message}. Try another source in Settings."
      file?.delete(); file = null; recording = false; paused = false
@@ -61,7 +65,8 @@ class RecordingService : Service() {
    RESUME -> if (recording && paused) {
     runCatching { recorder.resume(); paused = false; getSystemService(NotificationManager::class.java).notify(100, notification()) }
    }
-   STOP -> {
+   STOP, CALL_STOP -> {
+    if (intent.action == CALL_STOP && !callSession) return START_NOT_STICKY
     if (recording) {
      try {
       recorder.stop()
@@ -74,7 +79,7 @@ class RecordingService : Service() {
       lastError = "Recording could not be finalized: ${e.message}"
      }
     }
-    recording = false; paused = false; file = null
+    recording = false; paused = false; callSession = false; file = null
     stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
    }
   }
@@ -87,7 +92,7 @@ class RecordingService : Service() {
     recorder.stop()
     file?.let { EvidenceLedger(this).register(it) }
    } catch (e: Exception) { lastError = "Interrupted recording: ${e.message}" }
-   recording = false; paused = false
+   recording = false; paused = false; callSession = false
   }
   super.onDestroy()
  }
