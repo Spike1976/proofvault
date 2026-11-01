@@ -84,6 +84,8 @@ class MainActivity : FragmentActivity() {
 fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, onEnableLock: (Boolean) -> Unit = {}) {
  val context = LocalContext.current
  val vault = remember { VaultRepository(context) }
+ val secureStore = remember { SecureEvidenceStore(context) }
+ var secureCount by remember { mutableIntStateOf(secureStore.list().size) }
  val capturePrefs = remember { CapturePreferences(context) }
  var selectedCapture by remember { mutableStateOf(capturePrefs.source()) }
  val connector = remember { RecordingFolderConnector(context) }
@@ -214,7 +216,10 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
      Text("Recent recordings", style = MaterialTheme.typography.titleMedium)
      LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
       items(recordings.take(5), key = { it.absolutePath }) { file ->
-       EvidenceItem(file, playingFile == file.name, notes, ledger, onPlay = { play(file) },
+       EvidenceItem(file, playingFile == file.name, notes, ledger, onArchive = {
+         try { secureStore.seal(file); secureCount = secureStore.list().size; vault.delete(file); refresh() }
+         catch (e: Exception) { error = "Archive failed: ${e.message}" }
+        }, onPlay = { play(file) },
         onDelete = {
          player?.release(); player = null; playingFile = null
          notes.remove(file); vault.delete(file); refresh()
@@ -259,6 +264,7 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
      OutlinedButton(onClick = { importAudio.launch(arrayOf("audio/*")) }) { Text("Import Audio") }
      val visible = recordings.filter { it.name.contains(query, ignoreCase = true) || notes.get(it).contains(query, ignoreCase = true) }
      Text("${visible.size} items", color = muted)
+     InfoCard("Encrypted archive", "$secureCount protected files. Archive a recording from its evidence row; encrypted files stay separate from the regular playback library.")
      OutlinedButton(onClick = { exportZip.launch("ProofVault-Evidence.zip") }, enabled = recordings.isNotEmpty()) { Text("Export evidence ZIP + SHA-256 manifest") }
      LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
       items(visible, key = { it.absolutePath }) { file ->
@@ -360,7 +366,7 @@ private fun InfoCard(title: String, subtitle: String) {
 }
 
 @Composable
-private fun EvidenceItem(file: File, playing: Boolean, notes: EvidenceNotes, ledger: EvidenceLedger, onPlay: () -> Unit, onDelete: () -> Unit) {
+private fun EvidenceItem(file: File, playing: Boolean, notes: EvidenceNotes, ledger: EvidenceLedger, onArchive: () -> Unit, onPlay: () -> Unit, onDelete: () -> Unit) {
  var editNotes by remember { mutableStateOf(false) }
  var noteText by remember { mutableStateOf(notes.get(file)) }
  var confirmDelete by remember { mutableStateOf(false) }
@@ -380,6 +386,7 @@ private fun EvidenceItem(file: File, playing: Boolean, notes: EvidenceNotes, led
    IconButton(onClick = onPlay) {
     Icon(if (playing) Icons.Default.Stop else Icons.Default.PlayArrow, contentDescription = if (playing) "Stop" else "Play", tint = teal)
    }
+   IconButton(onClick = onArchive) { Icon(Icons.Default.Lock, "Encrypt and archive", tint = teal) }
    IconButton(onClick = { noteText = notes.get(file); editNotes = true }) { Icon(Icons.Default.EditNote, "Edit evidence notes", tint = teal) }
    IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Default.Delete, "Delete", tint = muted) }
   }
