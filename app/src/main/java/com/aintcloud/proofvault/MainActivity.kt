@@ -262,7 +262,7 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
      OutlinedButton(onClick = { exportZip.launch("ProofVault-Evidence.zip") }, enabled = recordings.isNotEmpty()) { Text("Export evidence ZIP + SHA-256 manifest") }
      LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
       items(visible, key = { it.absolutePath }) { file ->
-       EvidenceItem(file, playingFile == file.name, notes, onPlay = { play(file) },
+       EvidenceItem(file, playingFile == file.name, notes, ledger, onPlay = { play(file) },
         onDelete = {
          player?.release(); player = null; playingFile = null
          vault.delete(file); refresh()
