@@ -96,6 +96,7 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
  var recordings by remember { mutableStateOf(vault.list()) }
  var query by remember { mutableStateOf("") }
  val notes = remember { EvidenceNotes(context) }
+ val ledger = remember { EvidenceLedger(context) }
  var isRecording by remember { mutableStateOf(RecordingService.recording) }
  var isPaused by remember { mutableStateOf(RecordingService.paused) }
 
@@ -213,7 +214,7 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
      Text("Recent recordings", style = MaterialTheme.typography.titleMedium)
      LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
       items(recordings.take(5), key = { it.absolutePath }) { file ->
-       EvidenceItem(file, playingFile == file.name, notes, onPlay = { play(file) },
+       EvidenceItem(file, playingFile == file.name, notes, ledger, onPlay = { play(file) },
         onDelete = {
          player?.release(); player = null; playingFile = null
          notes.remove(file); vault.delete(file); refresh()
@@ -352,7 +353,7 @@ private fun InfoCard(title: String, subtitle: String) {
 }
 
 @Composable
-private fun EvidenceItem(file: File, playing: Boolean, notes: EvidenceNotes, onPlay: () -> Unit, onDelete: () -> Unit) {
+private fun EvidenceItem(file: File, playing: Boolean, notes: EvidenceNotes, ledger: EvidenceLedger, onPlay: () -> Unit, onDelete: () -> Unit) {
  var editNotes by remember { mutableStateOf(false) }
  var noteText by remember { mutableStateOf(notes.get(file)) }
  var confirmDelete by remember { mutableStateOf(false) }
@@ -362,6 +363,8 @@ private fun EvidenceItem(file: File, playing: Boolean, notes: EvidenceNotes, onP
    Spacer(Modifier.width(10.dp))
    Column(Modifier.weight(1f)) {
     Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    val integrityStatus = remember(file.name, file.lastModified(), file.length()) { ledger.status(file) }
+    Text("Integrity: $integrityStatus", style = MaterialTheme.typography.labelSmall, color = if (integrityStatus == EvidenceLedger.Status.CHANGED) Color.Red else muted)
     if (notes.get(file).isNotBlank()) Text(notes.get(file), maxLines = 1, overflow = TextOverflow.Ellipsis, color = teal, style = MaterialTheme.typography.bodySmall)
     Text("${DateFormat.getDateTimeInstance().format(Date(file.lastModified()))} • ${file.length() / 1024} KB", style = MaterialTheme.typography.labelSmall, color = muted)
    }
