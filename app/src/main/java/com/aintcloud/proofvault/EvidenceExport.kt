@@ -16,7 +16,7 @@ class EvidenceExport(private val context: Context) {
   output.use {
    ZipOutputStream(it).use { zip ->
     val names = mutableSetOf<String>()
-    val manifest = StringBuilder("ProofVault evidence export\\nSHA-256 | filename\\n")
+    val manifest = StringBuilder("ProofVault evidence export\nSHA-256 | filename\n")
     files.forEach { file ->
      val base = file.name.replace(Regex("[^a-zA-Z0-9_.-]"), "_")
      var name = base
@@ -25,7 +25,7 @@ class EvidenceExport(private val context: Context) {
      zip.putNextEntry(ZipEntry("evidence/$name"))
      file.inputStream().use { input -> input.copyTo(zip) }
      zip.closeEntry()
-     manifest.append(EvidenceIntegrity.sha256(file)).append(" | ").append(name).append('\\n')
+     manifest.append(EvidenceIntegrity.sha256(file)).append(" | ").append(name).append('\n')
     }
     zip.putNextEntry(ZipEntry("manifest.txt"))
     zip.write(manifest.toString().toByteArray(Charsets.UTF_8))
