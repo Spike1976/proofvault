@@ -17,8 +17,21 @@ class SecureEvidenceStore(private val context: Context) {
   val dest = File(root, UUID.randomUUID().toString() + ".pvault")
   crypto.encrypt(plaintext, dest)
   require(dest.isFile && dest.length() > 32L)
-  EvidenceLedger(context).register(dest)
-  return dest
+  var probe: File? = null
+  try {
+   probe = openTemporary(dest)
+   require(probe.length() == plaintext.length() &&
+    EvidenceIntegrity.sha256(probe) == EvidenceIntegrity.sha256(plaintext)) {
+    "Encrypted archive verification failed"
+   }
+   EvidenceLedger(context).register(dest)
+   return dest
+  } catch (t: Throwable) {
+   dest.delete()
+   throw t
+  } finally {
+   probe?.delete()
+  }
  }
  fun openTemporary(encrypted: File): File {
   require(owns(encrypted)) { "Not managed vault evidence" }
