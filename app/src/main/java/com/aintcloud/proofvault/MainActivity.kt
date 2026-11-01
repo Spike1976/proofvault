@@ -304,6 +304,8 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
      InfoCard("Device compatibility", capturePrefs.diagnostic(context))
      val deviceProfile = remember { DeviceCompatibility.detect() }
      InfoCard("Detected phone family", deviceProfile.label + " • " + deviceProfile.route.name.replace('_', ' '))
+     val dialer = remember { DialerInspector.inspect(context) }
+     InfoCard("Default calling app", dialer.label + "\n" + dialer.advice)
      InfoCard("Recommended recording setup", deviceProfile.instructions)
      InfoCard("Device limitations", deviceProfile.caveat)
      Text("This profile does not verify two-sided audio. Test a real call and check both voices.", color = muted)
