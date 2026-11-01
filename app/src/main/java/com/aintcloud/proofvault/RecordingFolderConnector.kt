@@ -15,13 +15,16 @@ class RecordingFolderConnector(private val context: Context) {
  fun isConnected(): Boolean = preferences.getString("tree_uri", null) != null
  fun connect(uri: Uri) {
   context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-  preferences.edit().putString("tree_uri", uri.toString()).apply()
+  val previous = preferences.getString("tree_uri", null)
+  val edit = preferences.edit().putString("tree_uri", uri.toString())
+  if (previous != uri.toString()) edit.remove("imported_ids")
+  edit.apply()
  }
  fun disconnect() { 
   preferences.getString("tree_uri", null)?.let { uri ->
    runCatching { context.contentResolver.releasePersistableUriPermission(Uri.parse(uri), Intent.FLAG_GRANT_READ_URI_PERMISSION) }
   }
-  preferences.edit().remove("tree_uri").apply()
+  preferences.edit().remove("tree_uri").remove("imported_ids").apply()
  }
  fun sync(): SyncResult {
   val uri = preferences.getString("tree_uri", null) ?: return SyncResult(0, 0, "No folder connected")
@@ -41,7 +44,11 @@ class RecordingFolderConnector(private val context: Context) {
     if (!file.isFile) continue
     val ext = file.name.orEmpty().substringAfterLast('.', "").lowercase()
     if (ext !in setOf("m4a", "mp3", "wav", "aac", "ogg")) continue
-    val key = file.uri.toString() + ":" + file.lastModified() + ":" + file.length()
+    // Ignore empty and actively modified recordings; retry at a later sync.
+    val size = file.length()
+    val modified = file.lastModified()
+    if (size <= 0L || (modified > 0L && System.currentTimeMillis() - modified < 60_000L)) { skipped++; continue }
+    val key = file.uri.toString() + ":" + modified + ":" + size
     if (key in seen) { skipped++; continue }
     try {
      vault.importAudio(file.uri)
