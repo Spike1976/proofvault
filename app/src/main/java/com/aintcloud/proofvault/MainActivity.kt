@@ -1,6 +1,9 @@
 package com.aintcloud.proofvault
 
 import android.Manifest
+import android.content.Intent
+import android.os.Build
+import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
 import android.media.MediaPlayer
 import android.os.Bundle
@@ -48,24 +51,23 @@ class MainActivity : ComponentActivity() {
 fun ProofVaultApp() {
  val context = LocalContext.current
  val vault = remember { VaultRepository(context) }
- val recorder = remember { AudioRecorder(context) }
+ 
  var tab by remember { mutableStateOf("Home") }
  var recordings by remember { mutableStateOf(vault.list()) }
  var query by remember { mutableStateOf("") }
  val notes = remember { EvidenceNotes(context) }
- var isRecording by remember { mutableStateOf(false) }
- var currentFile by remember { mutableStateOf<File?>(null) }
+ var isRecording by remember { mutableStateOf(RecordingService.recording) }
+ var isPaused by remember { mutableStateOf(RecordingService.paused) }
+
  var playingFile by remember { mutableStateOf<String?>(null) }
  var player by remember { mutableStateOf<MediaPlayer?>(null) }
  var error by remember { mutableStateOf<String?>(null) }
  val refresh = { recordings = vault.list() }
  val startRecording = {
   try {
-   val file = vault.newRecording()
-   recorder.start(file)
-   currentFile = file
-   isRecording = true
-  } catch (e: Exception) { error = e.message ?: "Unable to start recording" }
+   ContextCompat.startForegroundService(context, Intent(context, RecordingService::class.java).setAction(RecordingService.START))
+   isRecording = true; isPaused = false
+  } catch (e: Exception) { error = e.message ?: "Could not start recording" }
  }
  val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
   if (granted) startRecording() else error = "Microphone permission is required."
@@ -76,12 +78,13 @@ fun ProofVaultApp() {
    catch (e: Exception) { error = e.message ?: "Import failed" }
   }
  }
- funPlayPlaceholder()
  DisposableEffect(Unit) {
-  onDispose {
-   player?.release()
-   if (recorder.isRecording()) runCatching { recorder.stop() }
-  }
+  onDispose { player?.release() }
+ }
+ LaunchedEffect(tab) {
+  isRecording = RecordingService.recording
+  isPaused = RecordingService.paused
+  if (!isRecording) refresh()
  }
  fun play(file: File) {
   try {
@@ -160,17 +163,8 @@ fun ProofVaultApp() {
       FilledIconButton(
        onClick = {
         if (isRecording) {
-         try {
-          recorder.stop()
-          isRecording = false
-          currentFile = null
-          refresh()
-         } catch (e: Exception) {
-          isRecording = false
-          currentFile?.delete()
-          currentFile = null
-          error = "Recording failed: ${e.message}"
-         }
+         context.startService(Intent(context, RecordingService::class.java).setAction(RecordingService.STOP))
+         isRecording = false; isPaused = false; refresh()
         } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
          startRecording()
         } else {
@@ -183,8 +177,14 @@ fun ProofVaultApp() {
        Icon(if (isRecording) Icons.Default.Stop else Icons.Default.Mic, contentDescription = if (isRecording) "Stop recording" else "Start recording", modifier = Modifier.size(56.dp))
       }
      }
-     Text(if (isRecording) "Recording. Tap to stop and save." else "Tap to begin recording.", color = teal)
-     Text("Version 0.1 requires the app to remain open during recording.", color = muted)
+     Text(if (isRecording) (if (isPaused) "Recording paused" else "Recording active; notification visible") else "Tap to begin recording.", color = teal)
+     if (isRecording) {
+      OutlinedButton(onClick = {
+       context.startService(Intent(context, RecordingService::class.java).setAction(if (isPaused) RecordingService.RESUME else RecordingService.PAUSE))
+       isPaused = !isPaused
+      }) { Text(if (isPaused) "Resume" else "Pause") }
+     }
+     Text("Recording continues when the screen is switched away. Start recording with the app open.", color = muted)
     }
     "Vault" -> {
      Text("Vault Library", style = MaterialTheme.typography.titleLarge)
@@ -205,7 +205,7 @@ fun ProofVaultApp() {
     "Settings" -> {
      Text("Settings & Security", style = MaterialTheme.typography.titleLarge)
      InfoCard("Privacy", "Recordings remain in app-private local storage. No cloud or telemetry.")
-     InfoCard("Recording", "Manual device-microphone capture only in v0.1.0.")
+     InfoCard("Recording", "Foreground microphone recording with pause/resume. Calls are not intercepted.")
      InfoCard("Security", "Biometric lock and app-managed file encryption are planned, not implemented.")
      InfoCard("About", "ProofVault v0.1.0 • Ain't Cloud Software")
     }
