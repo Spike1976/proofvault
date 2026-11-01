@@ -86,6 +86,7 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
  val vault = remember { VaultRepository(context) }
  val secureStore = remember { SecureEvidenceStore(context) }
  var secureCount by remember { mutableIntStateOf(secureStore.list().size) }
+ var chosenEncrypted by remember { mutableStateOf<File?>(null) }
  val capturePrefs = remember { CapturePreferences(context) }
  var selectedCapture by remember { mutableStateOf(capturePrefs.source()) }
  val connector = remember { RecordingFolderConnector(context) }
@@ -133,6 +134,19 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
    } catch (e: Exception) {
     error = "Folder connection failed: ${e.message}"
    }
+  }
+ }
+ val exportEncrypted = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/mp4")) { uri ->
+  val encrypted = chosenEncrypted
+  chosenEncrypted = null
+  if (uri != null && encrypted != null) {
+   var temp: File? = null
+   try {
+    temp = secureStore.openTemporary(encrypted)
+    context.contentResolver.openOutputStream(uri)?.use { output -> temp.inputStream().use { it.copyTo(output) } }
+     ?: error("Cannot open export destination")
+   } catch (e: Exception) { error = "Encrypted export failed: ${e.message}" }
+   finally { temp?.delete() }
   }
  }
  val exportZip = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
@@ -264,7 +278,14 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
      OutlinedButton(onClick = { importAudio.launch(arrayOf("audio/*")) }) { Text("Import Audio") }
      val visible = recordings.filter { it.name.contains(query, ignoreCase = true) || notes.get(it).contains(query, ignoreCase = true) }
      Text("${visible.size} items", color = muted)
-     InfoCard("Encrypted archive", "$secureCount protected files. Archive a recording from its evidence row; encrypted files stay separate from the regular playback library.")
+     InfoCard("Encrypted archive", "$secureCount protected files. Archived audio requires export for playback.")
+     secureStore.list().forEach { encrypted ->
+      Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+       Icon(Icons.Default.Lock, contentDescription = null, tint = teal)
+       Text(encrypted.name.take(18), modifier = Modifier.weight(1f))
+       TextButton(onClick = { chosenEncrypted = encrypted; exportEncrypted.launch("ProofVault-Decrypted.m4a") }) { Text("Export") }
+      }
+     }
      OutlinedButton(onClick = { exportZip.launch("ProofVault-Evidence.zip") }, enabled = recordings.isNotEmpty()) { Text("Export evidence ZIP + SHA-256 manifest") }
      LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
       items(visible, key = { it.absolutePath }) { file ->
