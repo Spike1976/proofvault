@@ -371,7 +371,9 @@ private fun EvidenceItem(file: File, playing: Boolean, notes: EvidenceNotes, led
    Column(Modifier.weight(1f)) {
     Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
     val integrityStatus = remember(file.name, file.lastModified(), file.length()) { ledger.status(file) }
+    val audioQuality = remember(file.name, file.lastModified(), file.length()) { RecordingQuality.inspect(file) }
     Text("Integrity: $integrityStatus", style = MaterialTheme.typography.labelSmall, color = if (integrityStatus == EvidenceLedger.Status.CHANGED) Color.Red else muted)
+    Text(audioQuality.message, style = MaterialTheme.typography.labelSmall, color = if (audioQuality.playable) muted else Color.Red)
     if (notes.get(file).isNotBlank()) Text(notes.get(file), maxLines = 1, overflow = TextOverflow.Ellipsis, color = teal, style = MaterialTheme.typography.bodySmall)
     Text("${DateFormat.getDateTimeInstance().format(Date(file.lastModified()))} • ${file.length() / 1024} KB", style = MaterialTheme.typography.labelSmall, color = muted)
    }
