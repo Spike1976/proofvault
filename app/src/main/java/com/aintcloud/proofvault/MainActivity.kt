@@ -113,6 +113,7 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
  val ledger = remember { EvidenceLedger(context) }
  var isRecording by remember { mutableStateOf(RecordingService.recording) }
  var isPaused by remember { mutableStateOf(RecordingService.paused) }
+ var acousticActive by remember { mutableStateOf(AcousticRecordingService.active) }
 
  var playingFile by remember { mutableStateOf<String?>(null) }
  var player by remember { mutableStateOf<MediaPlayer?>(null) }
@@ -150,6 +151,12 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
   val denied = results.filterValues { !it }.keys
   error = if (denied.isEmpty()) "Requested permissions granted." else
    "Some permissions were denied. Open Android App Permissions below to review them."
+ }
+ val acousticPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+  if (granted) {
+   try { ContextCompat.startForegroundService(context, Intent(context, AcousticRecordingService::class.java).setAction(AcousticRecordingService.START)) }
+   catch (e: Exception) { error = "Acoustic recording start failed: ${e.message}" }
+  } else error = "Microphone permission required for acoustic recording."
  }
  val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
   if (granted) startRecording() else error = "Microphone permission is required."
@@ -231,8 +238,13 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
    }
   }
   ContextCompat.registerReceiver(context, receiver, IntentFilter(RecordingService.STATUS), ContextCompat.RECEIVER_NOT_EXPORTED)
+  val acousticReceiver = object : BroadcastReceiver() {
+   override fun onReceive(c: Context?, i: Intent?) { acousticActive = AcousticRecordingService.active; recordings = vault.list(); AcousticRecordingService.lastResult?.let { error = it } }
+  }
+  ContextCompat.registerReceiver(context, acousticReceiver, IntentFilter(AcousticRecordingService.STATUS), ContextCompat.RECEIVER_NOT_EXPORTED)
   onDispose {
    context.unregisterReceiver(receiver)
+   context.unregisterReceiver(acousticReceiver)
    player?.release()
   }
  }
@@ -375,6 +387,19 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
      val playbackDiagnostics = context.getSharedPreferences(PlaybackCaptureService.STATUS_PREFS, Context.MODE_PRIVATE)
      val captureResult = playbackDiagnostics.getString(PlaybackCaptureService.STATUS_KEY, null)
      if (captureResult != null) InfoCard("Last playback capture", captureResult)
+     Text("Speakerphone acoustic capture", style = MaterialTheme.typography.titleMedium)
+     Text("Low-level microphone capture to WAV. Speakerphone sound may be picked up acoustically when Android permits microphone access; this cannot capture protected headset or call streams.", color = muted)
+     Text("Input level: ${AcousticRecordingService.peak} • Silent seconds: ${AcousticRecordingService.silentSeconds}", color = muted)
+     OutlinedButton(onClick = {
+      if (AcousticRecordingService.active) {
+       context.startService(Intent(context, AcousticRecordingService::class.java).setAction(AcousticRecordingService.STOP))
+      } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+       try { ContextCompat.startForegroundService(context, Intent(context, AcousticRecordingService::class.java).setAction(AcousticRecordingService.START)) }
+       catch (e: Exception) { error = "Cannot start acoustic capture: ${e.message}" }
+      } else acousticPermission.launch(Manifest.permission.RECORD_AUDIO)
+     }, modifier = Modifier.fillMaxWidth()) {
+      Text(if (acousticActive) "Stop acoustic WAV recording" else "Start acoustic WAV recording")
+     }
      Text("App playback audio", style = MaterialTheme.typography.titleMedium)
      Text("Captures supported music/game/media audio with system consent. Phone calls, protected streams and apps that opt out cannot be captured.", color = muted)
      OutlinedButton(onClick = {
