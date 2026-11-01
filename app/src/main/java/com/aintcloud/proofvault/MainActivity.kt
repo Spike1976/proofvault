@@ -283,6 +283,7 @@ fun ProofVaultApp(startOnRecord: Boolean = false) {
       }
      }
      InfoCard("Device compatibility", capturePrefs.diagnostic(context))
+     OutlinedButton(onClick = { GenReportClipboard.copy(context, CompatibilityReport.create(context)); error = "Compatibility report copied." }, modifier = Modifier.fillMaxWidth()) { Text("Copy compatibility report") }
      Text("Recording folder connector", style = MaterialTheme.typography.titleMedium)
      Text(if (folderConnected) "Folder linked. Select Sync to import new recordings." else "Connect a recording folder exposed by your phone or recorder app. This does not capture calls.", color = muted)
      Button(onClick = { selectRecordingFolder.launch(null) }, modifier = Modifier.fillMaxWidth()) { Text(if (folderConnected) "Change recording folder" else "Connect recording folder") }
