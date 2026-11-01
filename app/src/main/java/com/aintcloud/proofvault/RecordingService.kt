@@ -23,9 +23,24 @@ class RecordingService : Service() {
   @Volatile var paused = false
   @Volatile var lastError: String? = null
   @Volatile var lastSource: String = "None"
+  @Volatile var liveAmplitude = 0
+  @Volatile var silentSeconds = 0
  }
  private lateinit var recorder: AudioRecorder
  private var file: File? = null
+ private val monitor = Handler(Looper.getMainLooper())
+ private val meter = object : Runnable {
+  override fun run() {
+   if (!recording) return
+   if (!paused) {
+    liveAmplitude = recorder.peakAmplitude()
+    if (liveAmplitude < 50) silentSeconds += 2 else silentSeconds = 0
+    if (silentSeconds >= 8) lastError = "No microphone signal for $silentSeconds seconds. Check audio routing."
+   }
+   sendBroadcast(Intent(STATUS).setPackage(packageName))
+   monitor.postDelayed(this, 2000)
+  }
+ }
  override fun onCreate() {
   super.onCreate()
   recorder = AudioRecorder(this)
@@ -54,6 +69,8 @@ class RecordingService : Service() {
      lastSource = chosenSource.label
      recorder.start(file!!, chosenSource)
      recording = true; paused = false
+     liveAmplitude = 0; silentSeconds = 0
+     monitor.removeCallbacks(meter); monitor.postDelayed(meter, 2000)
      callSession = intent.action == CALL_START
     } catch (t: Throwable) {
      lastError = "Recording source $lastSource failed: ${t.message}. Check permission, phone audio routing, and other recording apps."
@@ -81,6 +98,7 @@ class RecordingService : Service() {
       lastError = "Recording could not be finalized: ${e.message}"
      }
     }
+    monitor.removeCallbacks(meter)
     recording = false; paused = false; callSession = false; file = null
     stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
    }
@@ -89,6 +107,7 @@ class RecordingService : Service() {
   return START_NOT_STICKY
  }
  override fun onDestroy() {
+  monitor.removeCallbacks(meter)
   if (recording) {
    try {
     recorder.stop()
