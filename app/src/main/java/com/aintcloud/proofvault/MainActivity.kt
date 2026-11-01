@@ -421,6 +421,25 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
     "Settings" -> {
      Text("Settings & Security", style = MaterialTheme.typography.titleLarge)
      InfoCard("Privacy", "Recordings remain in app-private local storage. No cloud or telemetry.")
+     Text("Recording setup assistant", style = MaterialTheme.typography.titleMedium)
+     Text("Inspired by Cube ACR's device setup: verify each requirement before testing calls.", color = muted)
+     var setupRefresh by remember { mutableIntStateOf(0) }
+     val setupChecks = remember(setupRefresh) { RecordingSetup.checks(context) }
+     setupChecks.forEach { check ->
+      Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+       Icon(if (check.ok) Icons.Default.CheckCircle else Icons.Default.Warning,
+        contentDescription = null, tint = if (check.ok) teal else Color(0xFFFFC36D))
+       Spacer(Modifier.width(8.dp))
+       Column(Modifier.weight(1f)) {
+        Text(check.title, style = MaterialTheme.typography.titleSmall)
+        Text(check.detail, style = MaterialTheme.typography.bodySmall, color = muted)
+       }
+      }
+     }
+     OutlinedButton(onClick = { setupRefresh++ }, modifier = Modifier.fillMaxWidth()) {
+      Text("Recheck device readiness")
+     }
+     Text("Headsets and Wi-Fi calling may change whether call audio is available. Test with and without each. Do not disable emergency or accessibility features solely to record.", color = muted)
      Text("Recording permissions", style = MaterialTheme.typography.titleMedium)
      Text("Android permits microphone use while ProofVault is active or running its visible foreground recording service. It does not provide an Always allow microphone permission.", color = muted)
      OutlinedButton(onClick = {
