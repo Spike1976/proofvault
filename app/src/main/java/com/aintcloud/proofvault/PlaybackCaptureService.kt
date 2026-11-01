@@ -93,11 +93,11 @@ class PlaybackCaptureService : Service() {
    worker = Thread {
     var peak = 0
     var nonSilentSamples = 0L
+    var length = 0L
     try {
      RandomAccessFile(target, "rw").use { file ->
       writeHeader(file, 0)
       val buffer = ByteArray(8192)
-      var length = 0L
       while (active) {
        val count = audio.read(buffer, 0, buffer.size)
        if (count > 0) {
