@@ -18,6 +18,7 @@ class RecordingService : Service() {
   const val CHANNEL = "recording_status"
   @Volatile var recording = false
   @Volatile var paused = false
+  @Volatile var lastError: String? = null
  }
  private lateinit var recorder: AudioRecorder
  private var file: File? = null
@@ -43,10 +44,17 @@ class RecordingService : Service() {
    START -> if (!recording) {
     try {
      startForeground(100, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+     lastError = null
      file = VaultRepository(this).newRecording()
-     recorder.start(file!!, CapturePreferences(this).source())
+     try {
+      recorder.start(file!!, CapturePreferences(this).source())
+     } catch (first: Exception) {
+      if (CapturePreferences(this).source() == CaptureSource.MICROPHONE) throw first
+      recorder.start(file!!, CaptureSource.MICROPHONE)
+     }
      recording = true; paused = false
     } catch (t: Throwable) {
+     lastError = "Microphone recording could not start: ${t.message}"
      file?.delete(); file = null; recording = false; paused = false
      stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
     }
@@ -59,7 +67,16 @@ class RecordingService : Service() {
    }
    STOP -> {
     if (recording) {
-     try { recorder.stop(); file?.let { EvidenceLedger(this).register(it) } } catch (_: Exception) { file?.delete() }
+     try {
+      recorder.stop()
+      file?.let { completed ->
+       val check = RecordingQuality.inspect(completed)
+       if (check.playable) EvidenceLedger(this).register(completed)
+       else lastError = "Audio file could not be verified: ${check.message}"
+      }
+     } catch (e: Exception) {
+      lastError = "Recording could not be finalized: ${e.message}"
+     }
     }
     recording = false; paused = false; file = null
     stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
@@ -70,7 +87,10 @@ class RecordingService : Service() {
  }
  override fun onDestroy() {
   if (recording) {
-   try { recorder.stop() } catch (_: Exception) { file?.delete() }
+   try {
+    recorder.stop()
+    file?.let { EvidenceLedger(this).register(it) }
+   } catch (e: Exception) { lastError = "Interrupted recording: ${e.message}" }
    recording = false; paused = false
   }
   super.onDestroy()
