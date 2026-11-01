@@ -66,6 +66,8 @@ class MainActivity : ComponentActivity() {
 fun ProofVaultApp(startOnRecord: Boolean = false) {
  val context = LocalContext.current
  val vault = remember { VaultRepository(context) }
+ val connector = remember { RecordingFolderConnector(context) }
+ var folderConnected by remember { mutableStateOf(connector.isConnected()) }
  
  var tab by remember { mutableStateOf(if (startOnRecord) "Record" else "Home") }
  val settings = remember { context.getSharedPreferences("proofvault_settings", android.content.Context.MODE_PRIVATE) }
@@ -94,6 +96,19 @@ fun ProofVaultApp(startOnRecord: Boolean = false) {
  }
  val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
   if (granted) startRecording() else error = "Microphone permission is required."
+ }
+ val selectRecordingFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+  if (uri != null) {
+   try {
+    connector.connect(uri)
+    folderConnected = true
+    val result = connector.sync()
+    refresh()
+    error = "Connected. Imported ${result.imported} recordings." + (result.warning?.let { " $it" } ?: "")
+   } catch (e: Exception) {
+    error = "Folder connection failed: ${e.message}"
+   }
+  }
  }
  val exportZip = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
   if (uri != null) {
@@ -255,6 +270,16 @@ fun ProofVaultApp(startOnRecord: Boolean = false) {
       })
      }
      InfoCard("Recording", "Foreground microphone recording with pause/resume. Calls are not intercepted.")
+     Text("Recording folder connector", style = MaterialTheme.typography.titleMedium)
+     Text(if (folderConnected) "Folder linked. Select Sync to import new recordings." else "Connect a recording folder exposed by your phone or recorder app. This does not capture calls.", color = muted)
+     Button(onClick = { selectRecordingFolder.launch(null) }, modifier = Modifier.fillMaxWidth()) { Text(if (folderConnected) "Change recording folder" else "Connect recording folder") }
+     if (folderConnected) {
+      OutlinedButton(onClick = {
+       try { val result = connector.sync(); refresh(); error = "Imported ${result.imported} new files; skipped ${result.alreadySeen} previously imported." + (result.warning?.let { " $it" } ?: "") }
+       catch (e: Exception) { error = "Sync failed: ${e.message}" }
+      }, modifier = Modifier.fillMaxWidth()) { Text("Sync folder now") }
+      TextButton(onClick = { connector.disconnect(); folderConnected = false }) { Text("Disconnect folder") }
+     }
      InfoCard("Security", "Android Keystore encryption module added; vault integration and biometric lock not yet finished.")
      InfoCard("About", "ProofVault v0.1.0 • Ain't Cloud Software")
     }
