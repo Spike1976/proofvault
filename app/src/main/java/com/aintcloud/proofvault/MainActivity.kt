@@ -9,7 +9,7 @@ import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
 import android.media.MediaPlayer
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -37,7 +37,9 @@ private val panel = Color(0xFF112534)
 private val teal = Color(0xFF27E5D5)
 private val muted = Color(0xFF98AFBC)
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
+ private var unlocked by mutableStateOf(false)
+ private var authStarted = false
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
   if (intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("audio/") == true) {
@@ -54,16 +56,30 @@ class MainActivity : ComponentActivity() {
    intent.removeExtra(Intent.EXTRA_STREAM)
    intent.action = Intent.ACTION_MAIN
   }
+  unlocked = !AppLock.enabled(this)
   setContent {
    MaterialTheme(colorScheme = darkColorScheme(primary = teal, background = ink, surface = panel)) {
-    ProofVaultApp(startOnRecord = intent?.getBooleanExtra("open_record", false) == true)
+    if (unlocked) ProofVaultApp(startOnRecord = intent?.getBooleanExtra("open_record", false) == true, onEnableLock = { enabled ->
+      if (!enabled) { AppLock.setEnabled(this, false) }
+      else AppLock.authenticate(this, "Enable ProofVault lock", { AppLock.setEnabled(this, true) }, { })
+    })
+    else Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+      Button(onClick = { unlock() }) { Text("Unlock ProofVault") }
+    }
    }
   }
+ }
+ override fun onResume() { super.onResume(); if (!unlocked && !authStarted) unlock() }
+ override fun onStop() { super.onStop(); if (AppLock.enabled(this)) unlocked = false; authStarted = false }
+ private fun unlock() {
+  if (authStarted) return
+  authStarted = true
+  AppLock.authenticate(this, "Unlock ProofVault", { unlocked = true; authStarted = false }, { authStarted = false })
  }
 }
 
 @Composable
-fun ProofVaultApp(startOnRecord: Boolean = false) {
+fun ProofVaultApp(startOnRecord: Boolean = false, onEnableLock: (Boolean) -> Unit = {}) {
  val context = LocalContext.current
  val vault = remember { VaultRepository(context) }
  val capturePrefs = remember { CapturePreferences(context) }
@@ -305,7 +321,11 @@ fun ProofVaultApp(startOnRecord: Boolean = false) {
       }, modifier = Modifier.fillMaxWidth()) { Text("Sync folder now") }
       TextButton(onClick = { AutoImportScheduler.disable(context); autoImport = false; settings.edit().putBoolean("auto_import_enabled", false).apply(); connector.disconnect(); folderConnected = false }) { Text("Disconnect folder") }
      }
-     InfoCard("Security", "Android Keystore encryption module added; vault integration and biometric lock not yet finished.")
+     InfoCard("Security", "App lock uses your phone biometrics or device PIN. Individual recording encryption is still pending.")
+     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+      Column(Modifier.weight(1f)) { Text("Require device authentication"); Text("Unlock ProofVault with biometrics or screen lock", color = muted) }
+      Switch(checked = AppLock.enabled(context), enabled = AppLock.available(context), onCheckedChange = onEnableLock)
+     }
      InfoCard("About", "ProofVault v0.1.0 • Ain't Cloud Software")
     }
    }
