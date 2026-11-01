@@ -9,6 +9,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -50,6 +52,7 @@ fun ProofVaultApp() {
  var tab by remember { mutableStateOf("Home") }
  var recordings by remember { mutableStateOf(vault.list()) }
  var query by remember { mutableStateOf("") }
+ val notes = remember { EvidenceNotes(context) }
  var isRecording by remember { mutableStateOf(false) }
  var currentFile by remember { mutableStateOf<File?>(null) }
  var playingFile by remember { mutableStateOf<String?>(null) }
@@ -141,10 +144,10 @@ fun ProofVaultApp() {
      Text("Recent recordings", style = MaterialTheme.typography.titleMedium)
      LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
       items(recordings.take(5), key = { it.absolutePath }) { file ->
-       EvidenceItem(file, playingFile == file.name, onPlay = { play(file) },
+       EvidenceItem(file, playingFile == file.name, notes, onPlay = { play(file) },
         onDelete = {
          player?.release(); player = null; playingFile = null
-         vault.delete(file); refresh()
+         notes.remove(file); vault.delete(file); refresh()
         })
       }
      }
@@ -187,7 +190,7 @@ fun ProofVaultApp() {
      Text("Vault Library", style = MaterialTheme.typography.titleLarge)
      OutlinedTextField(query, { query = it }, label = { Text("Search recordings") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
      OutlinedButton(onClick = { importAudio.launch(arrayOf("audio/*")) }) { Text("Import Audio") }
-     val visible = recordings.filter { it.name.contains(query, ignoreCase = true) }
+     val visible = recordings.filter { it.name.contains(query, ignoreCase = true) || notes.get(it).contains(query, ignoreCase = true) }
      Text("${visible.size} items", color = muted)
      LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
       items(visible, key = { it.absolutePath }) { file ->
@@ -228,7 +231,9 @@ private fun InfoCard(title: String, subtitle: String) {
 }
 
 @Composable
-private fun EvidenceItem(file: File, playing: Boolean, onPlay: () -> Unit, onDelete: () -> Unit) {
+private fun EvidenceItem(file: File, playing: Boolean, notes: EvidenceNotes, onPlay: () -> Unit, onDelete: () -> Unit) {
+ var editNotes by remember { mutableStateOf(false) }
+ var noteText by remember { mutableStateOf(notes.get(file)) }
  var confirmDelete by remember { mutableStateOf(false) }
  ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = panel), modifier = Modifier.fillMaxWidth()) {
   Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -236,14 +241,17 @@ private fun EvidenceItem(file: File, playing: Boolean, onPlay: () -> Unit, onDel
    Spacer(Modifier.width(10.dp))
    Column(Modifier.weight(1f)) {
     Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    if (notes.get(file).isNotBlank()) Text(notes.get(file), maxLines = 1, overflow = TextOverflow.Ellipsis, color = teal, style = MaterialTheme.typography.bodySmall)
     Text("${DateFormat.getDateTimeInstance().format(Date(file.lastModified()))} • ${file.length() / 1024} KB", style = MaterialTheme.typography.labelSmall, color = muted)
    }
    IconButton(onClick = onPlay) {
     Icon(if (playing) Icons.Default.Stop else Icons.Default.PlayArrow, contentDescription = if (playing) "Stop" else "Play", tint = teal)
    }
+   IconButton(onClick = { noteText = notes.get(file); editNotes = true }) { Icon(Icons.Default.EditNote, "Edit evidence notes", tint = teal) }
    IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Default.Delete, "Delete", tint = muted) }
   }
  }
+ if (editNotes) AlertDialog(onDismissRequest = { editNotes = false }, title = { Text("Evidence notes & tags") }, text = { OutlinedTextField(value = noteText, onValueChange = { noteText = it }, label = { Text("Notes / searchable keywords") }, minLines = 3) }, confirmButton = { TextButton(onClick = { notes.set(file, noteText); editNotes = false }) { Text("Save") } }, dismissButton = { TextButton(onClick = { editNotes = false }) { Text("Cancel") } })
  if (confirmDelete) AlertDialog(
   onDismissRequest = { confirmDelete = false },
   title = { Text("Delete recording?") },
