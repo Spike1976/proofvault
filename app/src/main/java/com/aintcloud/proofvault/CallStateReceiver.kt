@@ -1,6 +1,7 @@
 package com.aintcloud.proofvault
 
 import android.Manifest
+import android.os.Build
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -43,7 +44,7 @@ class CallStateReceiver : BroadcastReceiver() {
    .setContentIntent(open)
    .setAutoCancel(true)
    .build()
-  if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+  if (Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
    manager.notify(4102, notification)
   }
  }
