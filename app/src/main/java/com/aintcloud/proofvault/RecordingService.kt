@@ -22,6 +22,7 @@ class RecordingService : Service() {
   @Volatile var recording = false
   @Volatile var paused = false
   @Volatile var lastError: String? = null
+  @Volatile var lastSource: String = "None"
  }
  private lateinit var recorder: AudioRecorder
  private var file: File? = null
@@ -49,12 +50,13 @@ class RecordingService : Service() {
      startForeground(100, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
      lastError = null
      file = VaultRepository(this).newRecording()
-     val chosenSource = CapturePreferences(this).source()
+     val chosenSource = if (intent.action == CALL_START) CapturePreferences(this).source() else CaptureSource.MICROPHONE
+     lastSource = chosenSource.label
      recorder.start(file!!, chosenSource)
      recording = true; paused = false
      callSession = intent.action == CALL_START
     } catch (t: Throwable) {
-     lastError = "Selected source ${CapturePreferences(this).source().label} failed: ${t.message}. Try another source in Settings."
+     lastError = "Recording source $lastSource failed: ${t.message}. Check permission, phone audio routing, and other recording apps."
      file?.delete(); file = null; recording = false; paused = false
      stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
     }
