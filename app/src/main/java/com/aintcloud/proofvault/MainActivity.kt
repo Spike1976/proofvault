@@ -142,8 +142,9 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
   if (uri != null && encrypted != null) {
    var temp: File? = null
    try {
-    temp = secureStore.openTemporary(encrypted)
-    context.contentResolver.openOutputStream(uri)?.use { output -> temp.inputStream().use { it.copyTo(output) } }
+    val decrypted = secureStore.openTemporary(encrypted)
+    temp = decrypted
+    context.contentResolver.openOutputStream(uri)?.use { output -> decrypted.inputStream().use { it.copyTo(output) } }
      ?: error("Cannot open export destination")
    } catch (e: Exception) { error = "Encrypted export failed: ${e.message}" }
    finally { temp?.delete() }
