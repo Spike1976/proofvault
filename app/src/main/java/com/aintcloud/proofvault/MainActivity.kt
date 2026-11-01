@@ -351,6 +351,16 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
      }
     }
     "Record" -> {
+     if (DeviceCompatibility.detect().family == DeviceCompatibility.Family.SAMSUNG) {
+      InfoCard("Two-sided cellular calls: Samsung Phone", "Use Samsung Phone's built-in Record calls feature if available on your firmware. ProofVault cannot capture protected incoming phone audio through the microphone. Import the Samsung recording afterward.")
+      OutlinedButton(onClick = {
+       try {
+        val dialer = Intent(Intent.ACTION_DIAL).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(dialer)
+       } catch (e: Exception) { error = "Cannot open Phone: ${e.message}" }
+      }, modifier = Modifier.fillMaxWidth()) { Text("Open Samsung Phone to record call") }
+      OutlinedButton(onClick = { importAudio.launch(arrayOf("audio/*")) }, modifier = Modifier.fillMaxWidth()) { Text("Import two-sided call recording") }
+     }
      Text("Microphone Recorder", style = MaterialTheme.typography.titleLarge)
      Text("Normal recording uses the device microphone. Experimental audio sources apply only to call-session tests.", color = muted)
      Text("Last source: ${RecordingService.lastSource}", color = muted)
