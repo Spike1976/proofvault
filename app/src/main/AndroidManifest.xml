@@ -4,12 +4,14 @@
  <uses-permission android:name="android.permission.READ_PHONE_STATE" />
  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+ <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
  <application android:label="ProofVault" android:allowBackup="false" android:theme="@android:style/Theme.Material.NoActionBar" android:usesCleartextTraffic="false">
   <receiver android:name=".CallStateReceiver" android:exported="false">
    <intent-filter><action android:name="android.intent.action.PHONE_STATE" /></intent-filter>
   </receiver>
   <service android:name=".RecordingService" android:exported="false" android:foregroundServiceType="microphone" />
+  <service android:name=".PlaybackCaptureService" android:exported="false" android:foregroundServiceType="mediaProjection" />
   <activity android:name=".MainActivity" android:exported="true">
    <intent-filter>
     <action android:name="android.intent.action.SEND"/>
