@@ -9,11 +9,12 @@ import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 /** Private app-scoped storage; app-managed encryption is a future milestone. */
 class VaultRepository(private val context: Context) {
  private val folder get() = File(context.filesDir, "recordings").apply { mkdirs() }
- fun newRecording(): File = File(folder, "Recording_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.m4a")
+ fun newRecording(): File = File(folder, "Recording_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}_${UUID.randomUUID()}.m4a")
  fun list(): List<File> = folder.listFiles()?.filter { it.isFile && it.extension.lowercase() in setOf("m4a", "mp3", "wav", "aac", "ogg") }?.sortedByDescending { it.lastModified() } ?: emptyList()
  fun valid(file: File): Boolean = runCatching { file.canonicalFile.parentFile == folder.canonicalFile }.getOrDefault(false)
  fun delete(file: File): Boolean {
@@ -28,11 +29,12 @@ class VaultRepository(private val context: Context) {
    if (i >= 0 && cursor.moveToFirst()) cursor.getString(i) else null
   } ?: "imported_audio"
   val ext = label.substringAfterLast('.', "m4a").lowercase().takeIf { it in setOf("m4a", "mp3", "wav", "aac", "ogg") } ?: "m4a"
-  val destination = File(folder, "Import_${System.currentTimeMillis()}.$ext")
+  val destination = File(folder, "Import_${UUID.randomUUID()}.$ext")
   try {
    context.contentResolver.openInputStream(uri).use { input ->
     requireNotNull(input) { "Cannot open selected file" }
     FileOutputStream(destination).use { output -> input.copyTo(output) }
+    require(destination.length() > 0L) { "Imported audio is empty" }
    }
   } catch (t: Throwable) { destination.delete(); throw t }
   EvidenceLedger(context).register(destination)
