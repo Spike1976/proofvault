@@ -10,6 +10,7 @@
   <receiver android:name=".CallStateReceiver" android:exported="false">
    <intent-filter><action android:name="android.intent.action.PHONE_STATE" /></intent-filter>
   </receiver>
+  <service android:name=".AcousticRecordingService" android:exported="false" android:foregroundServiceType="microphone" />
   <service android:name=".RecordingService" android:exported="false" android:foregroundServiceType="microphone" />
   <service android:name=".PlaybackCaptureService" android:exported="false" android:foregroundServiceType="mediaProjection" />
   <activity android:name=".MainActivity" android:exported="true">
