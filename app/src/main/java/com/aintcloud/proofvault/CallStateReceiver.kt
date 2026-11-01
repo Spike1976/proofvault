@@ -25,6 +25,12 @@ class CallStateReceiver : BroadcastReceiver() {
   if (!preferences.getBoolean("call_assist_enabled", false)) return
   if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) return
   val state = intent.getStringExtra(TelephonyManager.EXTRA_STATE)
+  if (state == TelephonyManager.EXTRA_STATE_IDLE) {
+   if (RecordingService.callSession)
+    context.startService(Intent(context, RecordingService::class.java).setAction(RecordingService.CALL_STOP))
+   context.getSystemService(NotificationManager::class.java).cancel(4102)
+   return
+  }
   if (state != TelephonyManager.EXTRA_STATE_OFFHOOK) return
 
   val manager = context.getSystemService(NotificationManager::class.java)
@@ -37,10 +43,16 @@ class CallStateReceiver : BroadcastReceiver() {
     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
   )
+  val record = PendingIntent.getForegroundService(
+   context, 42,
+   Intent(context, RecordingService::class.java).setAction(RecordingService.CALL_START),
+   PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+  )
   val notification = NotificationCompat.Builder(context, "call_assist")
    .setSmallIcon(android.R.drawable.ic_menu_call)
    .setContentTitle("ProofVault: Call detected")
-   .setContentText("Tap to open the recorder. Call audio may be inaccessible on this device.")
+   .setContentText("Tap Start recording to capture available call audio.")
+   .addAction(android.R.drawable.ic_btn_speak_now, "Start recording", record)
    .setContentIntent(open)
    .setAutoCancel(true)
    .setCategory(NotificationCompat.CATEGORY_CALL)
