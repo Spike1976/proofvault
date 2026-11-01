@@ -41,18 +41,18 @@ class MainActivity : ComponentActivity() {
   super.onCreate(savedInstanceState)
   setContent {
    MaterialTheme(colorScheme = darkColorScheme(primary = teal, background = ink, surface = panel)) {
-    ProofVaultApp()
+    ProofVaultApp(startOnRecord = intent?.getBooleanExtra("open_record", false) == true)
    }
   }
  }
 }
 
 @Composable
-fun ProofVaultApp() {
+fun ProofVaultApp(startOnRecord: Boolean = false) {
  val context = LocalContext.current
  val vault = remember { VaultRepository(context) }
  
- var tab by remember { mutableStateOf("Home") }
+ var tab by remember { mutableStateOf(if (startOnRecord) "Record" else "Home") }
  val settings = remember { context.getSharedPreferences("proofvault_settings", android.content.Context.MODE_PRIVATE) }
  var callAssist by remember { mutableStateOf(settings.getBoolean("call_assist_enabled", false)) }
  var recordings by remember { mutableStateOf(vault.list()) }
