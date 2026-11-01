@@ -59,7 +59,7 @@ class RecordingService : Service() {
    }
    STOP -> {
     if (recording) {
-     try { recorder.stop() } catch (_: Exception) { file?.delete() }
+     try { recorder.stop(); file?.let { EvidenceLedger(this).register(it) } } catch (_: Exception) { file?.delete() }
     }
     recording = false; paused = false; file = null
     stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
