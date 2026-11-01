@@ -1,6 +1,9 @@
 package com.aintcloud.proofvault
 
 import android.Manifest
+import android.app.Activity
+import android.media.projection.MediaProjectionManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -118,6 +121,17 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
   callAssist = permitted
   settings.edit().putBoolean("call_assist_enabled", permitted).apply()
   if (!permitted) error = "Phone permission is required to enable call detection."
+ }
+ val playbackConsent = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+  if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+   try {
+    val service = Intent(context, PlaybackCaptureService::class.java)
+     .setAction(PlaybackCaptureService.START)
+     .putExtra(PlaybackCaptureService.EXTRA_RESULT, result.resultCode)
+     .putExtra(PlaybackCaptureService.EXTRA_DATA, result.data)
+    ContextCompat.startForegroundService(context, service)
+   } catch (e: Exception) { error = "Playback capture failed: ${e.message}" }
+  } else error = "Playback recording requires Android's screen/audio capture permission."
  }
  val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
   if (granted) startRecording() else error = "Microphone permission is required."
@@ -272,6 +286,18 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
       }) { Text(if (isPaused) "Resume" else "Pause") }
      }
      Text("Recording continues when the screen is switched away. Start recording with the app open.", color = muted)
+     Text("App playback audio", style = MaterialTheme.typography.titleMedium)
+     Text("Captures supported music/game/media audio with system consent. Phone calls, protected streams and apps that opt out cannot be captured.", color = muted)
+     OutlinedButton(onClick = {
+      if (PlaybackCaptureService.active) {
+       context.startService(Intent(context, PlaybackCaptureService::class.java).setAction(PlaybackCaptureService.STOP))
+      } else {
+       val manager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+       playbackConsent.launch(manager.createScreenCaptureIntent())
+      }
+     }, modifier = Modifier.fillMaxWidth()) {
+      Text(if (PlaybackCaptureService.active) "Stop app audio capture" else "Record supported app audio")
+     }
     }
     "Vault" -> {
      Text("Vault Library", style = MaterialTheme.typography.titleLarge)
