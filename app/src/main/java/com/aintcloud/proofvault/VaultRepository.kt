@@ -16,7 +16,12 @@ class VaultRepository(private val context: Context) {
  fun newRecording(): File = File(folder, "Recording_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.m4a")
  fun list(): List<File> = folder.listFiles()?.filter { it.isFile && it.extension.lowercase() in setOf("m4a", "mp3", "wav", "aac", "ogg") }?.sortedByDescending { it.lastModified() } ?: emptyList()
  fun valid(file: File): Boolean = runCatching { file.canonicalFile.parentFile == folder.canonicalFile }.getOrDefault(false)
- fun delete(file: File): Boolean = valid(file) && file.delete()
+ fun delete(file: File): Boolean {
+  if (!valid(file)) return false
+  val deleted = file.delete()
+  if (deleted) EvidenceLedger(context).remove(file)
+  return deleted
+ }
  fun importAudio(uri: Uri): File {
   val label = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
    val i = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
@@ -30,6 +35,7 @@ class VaultRepository(private val context: Context) {
     FileOutputStream(destination).use { output -> input.copyTo(output) }
    }
   } catch (t: Throwable) { destination.delete(); throw t }
+  EvidenceLedger(context).register(destination)
   return destination
  }
  fun sha256(file: File): String {
