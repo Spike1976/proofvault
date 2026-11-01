@@ -46,15 +46,11 @@ class RecordingService : Service() {
      startForeground(100, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
      lastError = null
      file = VaultRepository(this).newRecording()
-     try {
-      recorder.start(file!!, CapturePreferences(this).source())
-     } catch (first: Exception) {
-      if (CapturePreferences(this).source() == CaptureSource.MICROPHONE) throw first
-      recorder.start(file!!, CaptureSource.MICROPHONE)
-     }
+     val chosenSource = CapturePreferences(this).source()
+     recorder.start(file!!, chosenSource)
      recording = true; paused = false
     } catch (t: Throwable) {
-     lastError = "Microphone recording could not start: ${t.message}"
+     lastError = "Selected source ${CapturePreferences(this).source().label} failed: ${t.message}. Try another source in Settings."
      file?.delete(); file = null; recording = false; paused = false
      stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
     }
