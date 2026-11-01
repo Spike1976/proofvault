@@ -31,5 +31,7 @@ class AudioRecorder(private val context: Context) {
   recorder = null
   try { r.stop() } finally { r.reset(); r.release() }
  }
+ /** Returns a nonnegative peak amplitude when MediaRecorder can sample the microphone. */
+ fun peakAmplitude(): Int = runCatching { recorder?.maxAmplitude ?: 0 }.getOrDefault(0)
  fun isRecording() = recorder != null
 }
