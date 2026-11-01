@@ -142,7 +142,7 @@ fun ProofVaultApp(startOnRecord: Boolean = false) {
   }
  }) { padding ->
   Column(
-   modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
+   modifier = Modifier.fillMaxSize().padding(padding).then(if (tab == "Settings") Modifier.verticalScroll(rememberScrollState()) else Modifier).padding(16.dp),
    verticalArrangement = Arrangement.spacedBy(14.dp)
   ) {
    Text("ProofVault", style = MaterialTheme.typography.headlineMedium, color = teal)
@@ -222,14 +222,17 @@ fun ProofVaultApp(startOnRecord: Boolean = false) {
      Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
       Column(Modifier.weight(1f)) {
        Text("Call detection assistance", style = MaterialTheme.typography.titleMedium)
-       Text("Show a notification when a cellular call connects. Does not automatically record both voices.", color = muted)
+       Text("Call alert only. Opens the microphone recorder when you tap the notification. No automatic recording or two-sided call capture.", color = muted)
       }
       Switch(checked = callAssist, onCheckedChange = { enabled ->
        if (!enabled) {
         callAssist = false
         settings.edit().putBoolean("call_assist_enabled", false).apply()
        } else {
-        phonePermission.launch(if (Build.VERSION.SDK_INT >= 33)
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED && (Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)) {
+         callAssist = true
+         settings.edit().putBoolean("call_assist_enabled", true).apply()
+        } else phonePermission.launch(if (Build.VERSION.SDK_INT >= 33)
          arrayOf(Manifest.permission.READ_PHONE_STATE, Manifest.permission.POST_NOTIFICATIONS)
          else arrayOf(Manifest.permission.READ_PHONE_STATE))
        }
