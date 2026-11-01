@@ -22,6 +22,8 @@ class PlaybackCaptureService : Service() {
   const val EXTRA_RESULT = "projection_result"
   const val EXTRA_DATA = "projection_data"
   @Volatile var active = false
+  const val STATUS_PREFS = "playback_capture_diagnostics"
+  const val STATUS_KEY = "last_result"
  }
  private var capture: AudioRecord? = null
  private var projection: MediaProjection? = null
@@ -89,6 +91,8 @@ class PlaybackCaptureService : Service() {
    audio.startRecording()
    val target = requireNotNull(output)
    worker = Thread {
+    var peak = 0
+    var nonSilentSamples = 0L
     try {
      RandomAccessFile(target, "rw").use { file ->
       writeHeader(file, 0)
@@ -96,15 +100,40 @@ class PlaybackCaptureService : Service() {
       var length = 0L
       while (active) {
        val count = audio.read(buffer, 0, buffer.size)
-       if (count > 0) { file.write(buffer, 0, count); length += count }
+       if (count > 0) {
+        file.write(buffer, 0, count)
+        length += count
+        var i = 0
+        while (i + 1 < count) {
+         val sample = ((buffer[i + 1].toInt() shl 8) or (buffer[i].toInt() and 255)).toShort().toInt()
+         val magnitude = kotlin.math.abs(sample)
+         if (magnitude > peak) peak = magnitude
+         if (magnitude > 64) nonSilentSamples++
+         i += 2
+        }
+       }
        else if (count < 0) break
       }
       writeHeader(file, length)
      }
-     if (target.length() > 44) EvidenceLedger(this).register(target) else target.delete()
-    } catch (_: Exception) { target.delete() }
+     val result = when {
+      length < sampleRate * 2L -> "No useful audio recorded. The source app may not permit playback capture."
+      peak < 65 || nonSilentSamples < 100L -> "Silent capture: Android supplied no audible playback. Try microphone recording or import audio."
+      else -> "Playback captured (peak $peak). Verify playback in Vault."
+     }
+     getSharedPreferences(STATUS_PREFS, MODE_PRIVATE).edit().putString(STATUS_KEY, result).apply()
+     if (length >= sampleRate * 2L && peak >= 65 && nonSilentSamples >= 100L) {
+      EvidenceLedger(this).register(target)
+     } else target.delete()
+    } catch (e: Exception) {
+     getSharedPreferences(STATUS_PREFS, MODE_PRIVATE).edit()
+      .putString(STATUS_KEY, "Playback capture failed: ${e.message ?: "Audio read error"}").apply()
+     target.delete()
+    }
    }.also { it.start() }
-  } catch (_: Exception) {
+  } catch (e: Exception) {
+   getSharedPreferences(STATUS_PREFS, MODE_PRIVATE).edit()
+    .putString(STATUS_KEY, "Unable to start playback capture: ${e.message ?: "Capture unavailable"}").apply()
    finishCapture()
    stopSelf()
   }
