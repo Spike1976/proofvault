@@ -26,7 +26,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import java.io.File
 import java.text.DateFormat
 import java.util.Date
@@ -209,7 +208,7 @@ fun ProofVaultApp(startOnRecord: Boolean = false) {
      OutlinedButton(onClick = { exportZip.launch("ProofVault-Evidence.zip") }, enabled = recordings.isNotEmpty()) { Text("Export evidence ZIP + SHA-256 manifest") }
      LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
       items(visible, key = { it.absolutePath }) { file ->
-       EvidenceItem(file, playingFile == file.name, onPlay = { play(file) },
+       EvidenceItem(file, playingFile == file.name, notes, onPlay = { play(file) },
         onDelete = {
          player?.release(); player = null; playingFile = null
          vault.delete(file); refresh()
