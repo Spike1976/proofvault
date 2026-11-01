@@ -66,6 +66,8 @@ class MainActivity : ComponentActivity() {
 fun ProofVaultApp(startOnRecord: Boolean = false) {
  val context = LocalContext.current
  val vault = remember { VaultRepository(context) }
+ val capturePrefs = remember { CapturePreferences(context) }
+ var selectedCapture by remember { mutableStateOf(capturePrefs.source()) }
  val connector = remember { RecordingFolderConnector(context) }
  var folderConnected by remember { mutableStateOf(connector.isConnected()) }
  var autoImport by remember { mutableStateOf(context.getSharedPreferences("proofvault_settings", android.content.Context.MODE_PRIVATE).getBoolean("auto_import_enabled", false)) }
@@ -272,6 +274,15 @@ fun ProofVaultApp(startOnRecord: Boolean = false) {
       })
      }
      InfoCard("Recording", "Foreground microphone recording with pause/resume. Calls are not intercepted.")
+     Text("Experimental audio source", style = MaterialTheme.typography.titleMedium)
+     Text("Choose a source for manual recordings. Android may return only your voice, silence, or deny capture during calls.", color = muted)
+     CaptureSource.entries.forEach { source ->
+      Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+       RadioButton(selected = selectedCapture == source, onClick = { selectedCapture = source; capturePrefs.select(source) })
+       Text(source.label)
+      }
+     }
+     InfoCard("Device compatibility", capturePrefs.diagnostic(context))
      Text("Recording folder connector", style = MaterialTheme.typography.titleMedium)
      Text(if (folderConnected) "Folder linked. Select Sync to import new recordings." else "Connect a recording folder exposed by your phone or recorder app. This does not capture calls.", color = muted)
      Button(onClick = { selectRecordingFolder.launch(null) }, modifier = Modifier.fillMaxWidth()) { Text(if (folderConnected) "Change recording folder" else "Connect recording folder") }
