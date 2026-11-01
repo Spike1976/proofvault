@@ -192,7 +192,7 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
     playingFile = null
    } else {
     val quality = RecordingQuality.inspect(file)
-    if (!quality.playable) error("This recording cannot be decoded: ${quality.message}")
+    if (!quality.playable) throw IllegalStateException("This recording cannot be decoded: ${quality.message}")
     val newPlayer = MediaPlayer()
     newPlayer.setAudioAttributes(
      android.media.AudioAttributes.Builder()
