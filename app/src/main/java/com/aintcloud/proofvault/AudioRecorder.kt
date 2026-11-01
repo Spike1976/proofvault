@@ -24,6 +24,8 @@ class AudioRecorder(private val context: Context) {
    recorder = r
   } catch (t: Throwable) { r.release(); file.delete(); throw t }
  }
+ fun pause() { recorder?.pause() ?: error("No active recording") }
+ fun resume() { recorder?.resume() ?: error("No active recording") }
  fun stop() {
   val r = recorder ?: return
   recorder = null
