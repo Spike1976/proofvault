@@ -16,6 +16,8 @@ import android.media.MediaPlayer
 import android.media.AudioManager
 import android.media.AudioFocusRequest
 import android.os.Bundle
+import android.provider.Settings
+import android.os.PowerManager
 import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -143,6 +145,11 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
     ContextCompat.startForegroundService(context, service)
    } catch (e: Exception) { error = "Playback capture failed: ${e.message}" }
   } else error = "Playback recording requires Android's screen/audio capture permission."
+ }
+ val permissionSetup = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
+  val denied = results.filterValues { !it }.keys
+  error = if (denied.isEmpty()) "Requested permissions granted." else
+   "Some permissions were denied. Open Android App Permissions below to review them."
  }
  val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
   if (granted) startRecording() else error = "Microphone permission is required."
@@ -413,6 +420,28 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
     "Settings" -> {
      Text("Settings & Security", style = MaterialTheme.typography.titleLarge)
      InfoCard("Privacy", "Recordings remain in app-private local storage. No cloud or telemetry.")
+     Text("Recording permissions", style = MaterialTheme.typography.titleMedium)
+     Text("Android permits microphone use while ProofVault is active or running its visible foreground recording service. It does not provide an Always allow microphone permission.", color = muted)
+     OutlinedButton(onClick = {
+      val requested = mutableListOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.READ_PHONE_STATE)
+      if (Build.VERSION.SDK_INT >= 33) requested.add(Manifest.permission.POST_NOTIFICATIONS)
+      permissionSetup.launch(requested.toTypedArray())
+     }, modifier = Modifier.fillMaxWidth()) { Text("Grant recording permissions") }
+     OutlinedButton(onClick = {
+      context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+       Uri.parse("package:${context.packageName}")))
+     }, modifier = Modifier.fillMaxWidth()) { Text("Open Android app permissions") }
+     val powerManager = remember { context.getSystemService(Context.POWER_SERVICE) as PowerManager }
+     val unrestricted = remember { mutableStateOf(powerManager.isIgnoringBatteryOptimizations(context.packageName)) }
+     Text(if (unrestricted.value) "Battery optimization: unrestricted" else "Battery optimization may interrupt long recordings.", color = muted)
+     OutlinedButton(onClick = {
+      try {
+       context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+      } catch (e: Exception) {
+       error = "Battery settings unavailable: ${e.message}"
+      }
+     }, modifier = Modifier.fillMaxWidth()) { Text("Open battery optimization settings") }
+
      Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
       Column(Modifier.weight(1f)) {
        Text("Call detection assistance", style = MaterialTheme.typography.titleMedium)
