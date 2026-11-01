@@ -2,6 +2,8 @@ package com.aintcloud.proofvault
 
 import android.Manifest
 import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import android.os.Build
 import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
@@ -38,6 +40,20 @@ private val muted = Color(0xFF98AFBC)
 class MainActivity : ComponentActivity() {
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
+  if (intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("audio/") == true) {
+   @Suppress("DEPRECATION")
+   val shared = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+   if (shared != null) {
+    try {
+     VaultRepository(this).importAudio(shared)
+     Toast.makeText(this, "Audio imported into ProofVault", Toast.LENGTH_LONG).show()
+    } catch (error: Exception) {
+     Toast.makeText(this, "Audio import failed: ${error.message}", Toast.LENGTH_LONG).show()
+    }
+   }
+   intent.removeExtra(Intent.EXTRA_STREAM)
+   intent.action = Intent.ACTION_MAIN
+  }
   setContent {
    MaterialTheme(colorScheme = darkColorScheme(primary = teal, background = ink, surface = panel)) {
     ProofVaultApp(startOnRecord = intent?.getBooleanExtra("open_record", false) == true)
