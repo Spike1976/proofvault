@@ -342,6 +342,7 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
      Text("Microphone Recorder", style = MaterialTheme.typography.titleLarge)
      Text("Normal recording uses the device microphone. Experimental audio sources apply only to call-session tests.", color = muted)
      Text("Last source: ${RecordingService.lastSource}", color = muted)
+     if (RecordingService.systemMuted) Text("Android reports this recording input is SILENCED", color = Color.Red)
      if (isRecording) Text("Microphone level: ${RecordingService.liveAmplitude} | Quiet: ${RecordingService.silentSeconds}s", color = if (RecordingService.silentSeconds >= 8) Color.Red else teal)
      Spacer(Modifier.height(24.dp))
      Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
