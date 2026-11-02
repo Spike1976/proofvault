@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
 import android.media.MediaPlayer
 import android.media.AudioManager
+import android.provider.DocumentsContract
 import android.media.AudioFocusRequest
 import android.os.Bundle
 import android.provider.Settings
@@ -126,7 +127,10 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
  val refresh = { recordings = vault.list() }
  val startRecording = {
   try {
-   ContextCompat.startForegroundService(context, Intent(context, RecordingService::class.java).setAction(RecordingService.START))
+   val mode = audioManager.mode
+   val inCall = mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION
+   val action = if (inCall) RecordingService.CALL_START else RecordingService.START
+   ContextCompat.startForegroundService(context, Intent(context, RecordingService::class.java).setAction(action))
    isRecording = true; isPaused = false
   } catch (e: Exception) { error = e.message ?: "Could not start recording" }
  }
@@ -359,11 +363,18 @@ fun ProofVaultApp(startOnRecord: Boolean = false, lockEnabled: Boolean = false, 
         context.startActivity(dialer)
        } catch (e: Exception) { error = "Cannot open Phone: ${e.message}" }
       }, modifier = Modifier.fillMaxWidth()) { Text("Open Samsung Phone to record call") }
-      OutlinedButton(onClick = { importAudio.launch(arrayOf("audio/*")) }, modifier = Modifier.fillMaxWidth()) { Text("Import two-sided call recording") }
+      OutlinedButton(onClick = {
+       val initial = DocumentsContract.buildDocumentUri(
+        "com.android.externalstorage.documents",
+        "primary:Recordings/Call"
+       )
+       selectRecordingFolder.launch(initial)
+      }, modifier = Modifier.fillMaxWidth()) { Text("Link Samsung Call folder") }
      }
      Text("Microphone Recorder", style = MaterialTheme.typography.titleLarge)
      Text("Normal recording uses the device microphone. Experimental audio sources apply only to call-session tests.", color = muted)
      Text("Last source: ${RecordingService.lastSource}", color = muted)
+     if (RecordingService.captureReport.isNotBlank()) Text(RecordingService.captureReport, color = muted)
      if (RecordingService.systemMuted) Text("Android reports this recording input is SILENCED", color = Color.Red)
      if (isRecording) Text("Microphone level: ${RecordingService.liveAmplitude} | Quiet: ${RecordingService.silentSeconds}s", color = if (RecordingService.silentSeconds >= 8) Color.Red else teal)
      Spacer(Modifier.height(24.dp))
@@ -631,6 +642,3 @@ private fun EvidenceItem(file: File, playing: Boolean, notes: EvidenceNotes, led
   dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } }
  )
 }
-
-@Composable
-private fun funPlayPlaceholder() {}

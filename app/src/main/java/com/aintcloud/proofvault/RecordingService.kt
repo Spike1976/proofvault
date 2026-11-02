@@ -3,6 +3,7 @@ package com.aintcloud.proofvault
 import android.app.*
 import android.content.*
 import android.content.pm.ServiceInfo
+import android.media.AudioManager
 import android.os.*
 import androidx.core.app.NotificationCompat
 import java.io.File
@@ -26,19 +27,21 @@ class RecordingService : Service() {
   @Volatile var liveAmplitude = 0
   @Volatile var silentSeconds = 0
   @Volatile var systemMuted = false
+  @Volatile var captureReport: String = ""
  }
  private lateinit var recorder: AudioRecorder
+ private var engine: CallCaptureEngine? = null
  private var file: File? = null
  private val monitor = Handler(Looper.getMainLooper())
  private val meter = object : Runnable {
   override fun run() {
    if (!recording) return
    if (!paused) {
-    liveAmplitude = recorder.peakAmplitude()
-    systemMuted = recorder.systemSilenced
-    if (systemMuted) lastError = "Android is silencing ProofVault microphone capture during this session. Other call audio cannot be forced by an app permission."
+    liveAmplitude = engine?.peak ?: recorder.peakAmplitude()
+    systemMuted = engine?.systemSilenced ?: recorder.systemSilenced
+    if (systemMuted) lastError = "Android is silencing this capture. Samples from a silenced session are not kept."
     if (liveAmplitude < 50) silentSeconds += 2 else silentSeconds = 0
-    if (silentSeconds >= 8) lastError = "No microphone signal for $silentSeconds seconds. Check audio routing."
+    if (silentSeconds >= 8 && engine == null) lastError = "No microphone signal for $silentSeconds seconds. Check audio routing."
    }
    sendBroadcast(Intent(STATUS).setPackage(packageName))
    monitor.postDelayed(this, 2000)
@@ -55,7 +58,11 @@ class RecordingService : Service() {
   val stop = PendingIntent.getService(this, 1, Intent(this, RecordingService::class.java).setAction(STOP), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
   return NotificationCompat.Builder(this, CHANNEL)
    .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-   .setContentTitle(if (paused) "ProofVault recording paused" else "ProofVault recording microphone")
+   .setContentTitle(when {
+    paused -> "ProofVault recording paused"
+    callSession -> "ProofVault call capture"
+    else -> "ProofVault recording microphone"
+   })
    .setContentText("Tap to return to ProofVault")
    .setContentIntent(open)
    .addAction(android.R.drawable.ic_media_pause, "Stop & save", stop)
@@ -64,59 +71,132 @@ class RecordingService : Service() {
  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
   when (intent?.action) {
    START, CALL_START -> if (!recording) {
+    val audioMode = (getSystemService(AUDIO_SERVICE) as AudioManager).mode
+    val inCall = intent.action == CALL_START ||
+     audioMode == AudioManager.MODE_IN_CALL || audioMode == AudioManager.MODE_IN_COMMUNICATION
     try {
      startForeground(100, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
      lastError = null
-     file = VaultRepository(this).newRecording()
-     val chosenSource = if (intent.action == CALL_START) CapturePreferences(this).source() else CaptureSource.MICROPHONE
-     lastSource = chosenSource.label
-     recorder.start(file!!, chosenSource)
-     recording = true; paused = false
      liveAmplitude = 0; silentSeconds = 0; systemMuted = false
-     monitor.removeCallbacks(meter); monitor.postDelayed(meter, 2000)
-     callSession = intent.action == CALL_START
+     if (inCall) startCallCapture() else startMicrophone()
     } catch (t: Throwable) {
      lastError = "Recording source $lastSource failed: ${t.message}. Check permission, phone audio routing, and other recording apps."
-     file?.delete(); file = null; recording = false; paused = false
+     file?.delete(); file = null; recording = false; paused = false; engine = null
      stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
     }
    }
    PAUSE -> if (recording && !paused) {
-    runCatching { recorder.pause(); paused = true; getSystemService(NotificationManager::class.java).notify(100, notification()) }
+    runCatching {
+     engine?.setPaused(true) ?: recorder.pause()
+     paused = true
+     getSystemService(NotificationManager::class.java).notify(100, notification())
+    }
    }
    RESUME -> if (recording && paused) {
-    runCatching { recorder.resume(); paused = false; getSystemService(NotificationManager::class.java).notify(100, notification()) }
+    runCatching {
+     engine?.setPaused(false) ?: recorder.resume()
+     paused = false
+     getSystemService(NotificationManager::class.java).notify(100, notification())
+    }
    }
    STOP, CALL_STOP -> {
     if (intent.action == CALL_STOP && !callSession) return START_NOT_STICKY
-    if (recording) {
-     try {
-      recorder.stop()
-      file?.let { completed ->
-       val check = RecordingQuality.inspect(completed)
-       if (check.playable) EvidenceLedger(this).register(completed)
-       else lastError = "Audio file could not be verified: ${check.message}"
-      }
-     } catch (e: Exception) {
-      lastError = "Recording could not be finalized: ${e.message}"
-     }
-    }
+    finishRecording()
     monitor.removeCallbacks(meter)
-    recording = false; paused = false; callSession = false; file = null
+    recording = false; paused = false; callSession = false; file = null; engine = null
     stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
    }
   }
   sendBroadcast(Intent(STATUS).setPackage(packageName))
   return START_NOT_STICKY
  }
- override fun onDestroy() {
+ private fun startMicrophone() {
+  file = VaultRepository(this).newRecording()
+  val chosen = CaptureSource.MICROPHONE
+  lastSource = chosen.label
+  captureReport = ""
+  recorder.start(file!!, chosen)
+  recording = true
+  paused = false
+  callSession = false
+  engine = null
   monitor.removeCallbacks(meter)
-  if (recording) {
+  monitor.postDelayed(meter, 2000)
+ }
+ private fun startCallCapture() {
+  val placeholder = VaultRepository(this).newRecording()
+  val wav = File(placeholder.parentFile, placeholder.nameWithoutExtension + ".wav")
+  placeholder.delete()
+  file = wav
+  val capture = CallCaptureEngine(this)
+  engine = capture
+  recording = true
+  paused = false
+  callSession = true
+  lastSource = "Probing call audio"
+  captureReport = ""
+  getSystemService(NotificationManager::class.java).notify(100, notification())
+  monitor.removeCallbacks(meter)
+  monitor.postDelayed(meter, 2000)
+  capture.begin(wav) { report ->
+   if (engine !== capture) return@begin
+   captureReport = report.summary
+   if (!report.accepted) {
+    lastSource = "Blocked"
+    lastError = report.summary
+    systemMuted = true
+    wav.delete()
+    file = null
+    recording = false
+    paused = false
+    callSession = false
+    engine = null
+    monitor.removeCallbacks(meter)
+    sendBroadcast(Intent(STATUS).setPackage(packageName))
+    stopForeground(STOP_FOREGROUND_REMOVE)
+    stopSelf()
+   } else {
+    lastSource = report.sourceLabel
+    lastError = null
+    sendBroadcast(Intent(STATUS).setPackage(packageName))
+   }
+  }
+ }
+ private fun finishRecording() {
+  if (!recording && engine == null) return
+  val capture = engine
+  val completed = file
+  if (capture != null) {
+   capture.stop()
+   engine = null
+   if (completed != null && completed.isFile && completed.length() > 44) {
+    val check = RecordingQuality.inspect(completed)
+    if (check.playable) EvidenceLedger(this).register(completed)
+    else {
+     lastError = "Audio file could not be verified: ${check.message}"
+     completed.delete()
+    }
+   } else if (lastError == null) {
+    lastError = captureReport.ifBlank { "No call audio was captured." }
+   }
+  } else if (recording) {
    try {
     recorder.stop()
-    file?.let { EvidenceLedger(this).register(it) }
-   } catch (e: Exception) { lastError = "Interrupted recording: ${e.message}" }
-   recording = false; paused = false; callSession = false
+    completed?.let { saved ->
+     val check = RecordingQuality.inspect(saved)
+     if (check.playable) EvidenceLedger(this).register(saved)
+     else lastError = "Audio file could not be verified: ${check.message}"
+    }
+   } catch (e: Exception) {
+    lastError = "Recording could not be finalized: ${e.message}"
+   }
+  }
+ }
+ override fun onDestroy() {
+  monitor.removeCallbacks(meter)
+  if (recording || engine != null) {
+   try { finishRecording() } catch (e: Exception) { lastError = "Interrupted recording: ${e.message}" }
+   recording = false; paused = false; callSession = false; engine = null
   }
   super.onDestroy()
  }

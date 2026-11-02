@@ -12,6 +12,8 @@ import android.content.pm.PackageManager
 import android.telephony.TelephonyManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 
 /**
  * User-enabled call-state awareness. Does not intercept telephone audio or
@@ -29,6 +31,9 @@ class CallStateReceiver : BroadcastReceiver() {
    if (RecordingService.callSession)
     context.startService(Intent(context, RecordingService::class.java).setAction(RecordingService.CALL_STOP))
    context.getSystemService(NotificationManager::class.java).cancel(4102)
+   if (RecordingFolderConnector(context).isConnected()) {
+    WorkManager.getInstance(context).enqueue(OneTimeWorkRequestBuilder<AutoImportWorker>().build())
+   }
    return
   }
   if (state != TelephonyManager.EXTRA_STATE_OFFHOOK) return

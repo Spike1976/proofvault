@@ -100,16 +100,25 @@ class AcousticRecordingService : Service() {
        peak = localPeak
        if(localPeak<96) silentBytes += n.toLong() else silentBytes = 0L
        silentSeconds = (silentBytes / (sampleRate * 2)).toInt()
+       if (countBytes > sampleRate * 4L && nonSilent == 0L) {
+        val mode = (getSystemService(AUDIO_SERVICE) as AudioManager).mode
+        if (mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION) {
+         running.set(false)
+        }
+       }
       }
       wavHeader(file,countBytes)
      }
-     if(countBytes>0L && totalSamples>0) {
+     if(countBytes>0L && totalSamples>0 && nonSilent>0L) {
       EvidenceLedger(this).register(output)
-      lastResult = if(nonSilent==0L) "Recording saved but microphone received silence. Check call routing." else
-       "Acoustic WAV saved. Audible parties still need verification."
+      lastResult = "Acoustic WAV saved. Audible parties still need verification."
      } else {
       output.delete()
-      lastResult = "No microphone data received"
+      val mode = (getSystemService(AUDIO_SERVICE) as AudioManager).mode
+      lastResult = if (mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION)
+       "Telephony silenced the microphone for this call. No evidence file was kept."
+      else if (nonSilent==0L) "Recording discarded. Microphone received only silence."
+      else "No microphone data received"
      }
     } catch(t: Throwable) {
      lastResult = "Acoustic recording failed: ${t.message}"
