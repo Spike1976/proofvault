@@ -69,7 +69,8 @@ class CallCaptureEngine(private val context: Context) {
   val attempts = mutableListOf<String>()
   for (candidate in candidates()) {
    if (!running.get()) break
-   val opened = open(candidate) ?: run {
+   val opened = open(candidate)
+   if (opened == null) {
     attempts += "${candidate.label}: unavailable"
     continue
    }
